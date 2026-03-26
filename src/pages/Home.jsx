@@ -26,8 +26,12 @@ function Home() {
   const handleGoogleSignIn = async () => {
     setError('');
     setLoadingState(true);
+    
     try {
+      alert('Starting Google sign-in...');
       const result = await signInWithGoogle();
+      alert('Sign-in succeeded! UID: ' + result.user.uid);
+      
       const firebaseUser = {
         uid: result.user.uid,
         email: result.user.email,
@@ -35,21 +39,19 @@ function Home() {
         photoURL: result.user.photoURL,
       };
       
+      alert('Saving user to database...');
       const userProfile = await userService.createOrUpdateUser(firebaseUser);
+      alert('User saved! Profile: ' + JSON.stringify(userProfile));
       
       setUser(firebaseUser);
       setUserProfile(userProfile);
       setLoading(false);
       navigate('/lobby');
     } catch (err) {
-      console.error('Full error:', err);
-      console.error('Error code:', err.code);
-      console.error('Error message:', err.message);
-      console.error('Error stack:', err.stack);
-      
-      const errorInfo = err.code ? `${err.code}: ${err.message}` : err.message;
-      alert('Google Sign-In Error:\n\n' + errorInfo);
-      setError('Failed to sign in: ' + errorInfo);
+      let errorMsg = err.message || err.code || JSON.stringify(err) || 'Unknown error';
+      alert('FAILED: ' + errorMsg);
+      console.log('Full error:', err);
+      setError('Failed to sign in. Error: ' + errorMsg);
       setLoadingState(false);
     }
   };
