@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
-import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User } from 'lucide-react';
+import { signInWithGoogle } from '../services/firebase';
+import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Chrome } from 'lucide-react';
 import './Home.css';
 
 function Home() {
@@ -20,6 +21,28 @@ function Home() {
     navigate('/lobby');
     return null;
   }
+
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setLoadingState(true);
+    try {
+      const result = await signInWithGoogle();
+      const user = {
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+      };
+      setUser(user);
+      setLoading(false);
+      navigate('/lobby');
+    } catch (err) {
+      console.error('Google sign in error:', err);
+      setError('Google sign in failed. Please try again.');
+    } finally {
+      setLoadingState(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -157,6 +180,20 @@ function Home() {
               </p>
             </div>
 
+            <button 
+              type="button" 
+              className="btn btn-google"
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+            >
+              <Chrome size={20} />
+              Continue with Google
+            </button>
+
+            <div className="auth-divider">
+              <span>or</span>
+            </div>
+
             <form onSubmit={handleSubmit} className="auth-form">
               {!isLogin && (
                 <div className="input-group">
@@ -235,10 +272,6 @@ function Home() {
                   {isLogin ? 'Sign Up' : 'Sign In'}
                 </button>
               </p>
-            </div>
-
-            <div className="auth-demo-note">
-              <p>Demo Mode: Enter any email/password to explore</p>
             </div>
           </div>
         </section>
