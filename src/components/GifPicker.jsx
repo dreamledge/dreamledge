@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, X, TrendingUp, Loader2 } from 'lucide-react';
 import './GifPicker.css';
 
-const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCY';
+const GIPHY_API_KEY = 'dc6zaTOxFJmzC';
 
 function GifPicker({ onSelect, onClose }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -17,19 +17,21 @@ function GifPicker({ onSelect, onClose }) {
   const fetchGifs = async (type, query = '') => {
     setLoading(true);
     try {
-      let url = `https://tenor.googleapis.com/v2/${type}?key=${TENOR_API_KEY}&limit=20&media_filter=gif,tinygif`;
+      let endpoint = type === 'trending' ? 'trending' : 'search';
+      let url = `https://api.giphy.com/v1/gifs/${endpoint}?api_key=${GIPHY_API_KEY}&limit=20&rating=pg-13`;
+      
       if (query) {
-        url = `https://tenor.googleapis.com/v2/search?key=${TENOR_API_KEY}&q=${encodeURIComponent(query)}&limit=20&media_filter=gif,tinygif`;
+        url += `&q=${encodeURIComponent(query)}`;
       }
       
       const response = await fetch(url);
       const data = await response.json();
       
-      if (data.results) {
-        const formattedGifs = data.results.map(gif => ({
+      if (data.data && Array.isArray(data.data)) {
+        const formattedGifs = data.data.map(gif => ({
           id: gif.id,
-          url: gif.media_formats?.tinygif?.url || gif.media_formats?.gif?.url,
-          preview: gif.media_formats?.tinygif?.url || gif.media_formats?.gif?.url
+          url: gif.images?.fixed_width?.url || gif.images?.original?.url,
+          preview: gif.images?.fixed_width?.url || gif.images?.original?.url
         })).filter(g => g.url);
         setGifs(formattedGifs);
       }
@@ -104,7 +106,7 @@ function GifPicker({ onSelect, onClose }) {
       </div>
       
       <div className="gif-picker-footer">
-        <span>TENOR</span>
+        <span>GIPHY</span>
       </div>
     </div>
   );
