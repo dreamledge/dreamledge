@@ -1,18 +1,29 @@
 .gif-picker {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
+  position: fixed;
+  bottom: 80px;
+  left: 0.5rem;
+  right: 0.5rem;
+  max-height: 60vh;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  margin-bottom: 0.5rem;
-  max-height: 320px;
   display: flex;
   flex-direction: column;
-  z-index: 100;
+  z-index: 1000;
   box-shadow: var(--shadow-elevated);
   animation: slideUp var(--transition-base) ease-out;
+}
+
+@media (min-width: 768px) {
+  .gif-picker {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    max-height: 320px;
+    margin-bottom: 0.5rem;
+    border-radius: var(--radius-lg);
+  }
 }
 
 .gif-picker-header {
