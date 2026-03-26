@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore, useUIStore } from '../stores/appStore';
+import { chatService } from '../services/chatService';
 import { Search, Plus, Send, Users, MessageCircle, Hash, ArrowLeft, X, Check } from 'lucide-react';
 import GifPicker from '../components/GifPicker';
 import './Messages.css';
@@ -38,7 +39,7 @@ function Messages() {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const { user, userProfile } = useAuthStore();
-  const { isGifPickerOpen, toggleGifPicker } = useUIStore();
+  const { isGifPickerOpen, toggleGifPicker, closeGifPicker } = useUIStore();
   const [conversations, setConversations] = useState(DEMO_CONVERSATIONS);
   const [rooms, setRooms] = useState(DEMO_ROOMS);
   const [activeTab, setActiveTab] = useState(conversationId ? 'chat' : 'dms');
@@ -48,6 +49,7 @@ function Messages() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -65,6 +67,24 @@ function Messages() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (!selectedConversation) return;
+    
+    const chatType = selectedConversation.type === 'room' ? 'rooms' : 'dms';
+    const chatId = selectedConversation.id;
+    
+    const unsubscribe = chatService.subscribeToMessages(chatType, chatId, (realTimeMessages) => {
+      if (realTimeMessages.length > 0) {
+        setMessages(realTimeMessages);
+        setIsConnected(true);
+      } else {
+        setIsConnected(false);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [selectedConversation]);
+
   const filteredConversations = conversations.filter(c => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -80,56 +100,102 @@ function Messages() {
     navigate(`/messages/${conv.id}`, { replace: true });
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !selectedConversation) return;
 
-    const message = {
+    const chatType = selectedConversation.type === 'room' ? 'rooms' : 'dms';
+    const username = userProfile?.username || user?.displayName || 'Anonymous';
+    
+    const tempMessage = {
       id: Date.now(),
       userId: user?.uid || 'me',
-      username: userProfile?.username || 'You',
+      username,
       message: newMessage,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isGif: false
     };
-
-    setMessages([...messages, message]);
+    
+    setMessages(prev => [...prev, tempMessage]);
+    
+    try {
+      await chatService.sendMessage(
+        chatType,
+        selectedConversation.id,
+        user?.uid || 'me',
+        username,
+        newMessage
+      );
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+    
     setNewMessage('');
   };
 
-  const handleSendGif = (gifUrl) => {
-    const message = {
+  const handleSendGif = async (gifUrl) => {
+    if (!selectedConversation) return;
+
+    const chatType = selectedConversation.type === 'room' ? 'rooms' : 'dms';
+    const username = userProfile?.username || user?.displayName || 'Anonymous';
+    
+    const tempMessage = {
       id: Date.now(),
       userId: user?.uid || 'me',
-      username: userProfile?.username || 'You',
+      username,
       message: '',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isGif: true,
       gifUrl
     };
-
-    setMessages([...messages, message]);
+    
+    setMessages(prev => [...prev, tempMessage]);
+    
+    try {
+      await chatService.sendMessage(
+        chatType,
+        selectedConversation.id,
+        user?.uid || 'me',
+        username,
+        '',
+        true,
+        gifUrl
+      );
+    } catch (error) {
+      console.error('Failed to send GIF:', error);
+    }
+    
     setNewMessage('');
+    closeGifPicker();
   };
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     if (!newRoomName.trim()) return;
     
-    const newRoom = {
-      id: `room_${Date.now()}`,
-      name: newRoomName,
-      members: 1,
-      isPublic: true,
-      type: 'room',
-      lastMessage: 'Room created',
-      time: 'Now',
-      unread: 0
-    };
+    const username = userProfile?.username || user?.displayName || 'Anonymous';
     
-    setRooms([newRoom, ...rooms]);
-    setConversations([newRoom, ...conversations]);
-    setNewRoomName('');
-    setShowCreateRoom(false);
-    handleSelectConversation(newRoom);
+    try {
+      const roomId = await chatService.createRoom(newRoomName, user?.uid || 'me');
+      
+      const newRoom = {
+        id: roomId,
+        name: newRoomName,
+        members: 1,
+        isPublic: true,
+        type: 'room',
+        lastMessage: 'Room created',
+        time: 'Now',
+        unread: 0
+      };
+      
+      setRooms([newRoom, ...rooms]);
+      setConversations([newRoom, ...conversations]);
+      setNewRoomName('');
+      setShowCreateRoom(false);
+      handleSelectConversation(newRoom);
+    } catch (error) {
+      console.error('Failed to create room:', error);
+    }
   };
 
   const handleBack = () => {

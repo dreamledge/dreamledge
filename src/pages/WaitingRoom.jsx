@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore, useBattleStore, useUIStore } from '../stores/appStore';
+import { chatService } from '../services/chatService';
 import { Mic, Gavel, Users, Copy, Check, Send, X, Video, VideoOff, MicOff, Mic as MicOn } from 'lucide-react';
 import GifPicker from '../components/GifPicker';
 import './WaitingRoom.css';
@@ -17,7 +18,7 @@ function WaitingRoom() {
   const navigate = useNavigate();
   const { user, userProfile } = useAuthStore();
   const { userRole, isHost, setParticipants } = useBattleStore();
-  const { isGifPickerOpen, toggleGifPicker } = useUIStore();
+  const { isGifPickerOpen, toggleGifPicker, closeGifPicker } = useUIStore();
   const [participants, setLocalParticipants] = useState(DEMO_PARTICIPANTS);
   const [chatMessages, setChatMessages] = useState([
     { id: 1, userId: '1', username: 'MC_Flow', message: 'Ready to drop some heat! 🔥', time: '2:30 PM' },
@@ -38,41 +39,88 @@ function WaitingRoom() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
+  useEffect(() => {
+    if (!roomId) return;
+    
+    const unsubscribe = chatService.subscribeToMessages('waitingRooms', roomId, (realTimeMessages) => {
+      if (realTimeMessages.length > 0) {
+        setChatMessages(realTimeMessages);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [roomId]);
+
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !roomId) return;
 
-    const message = {
+    const username = userProfile?.username || user?.displayName || 'Anonymous';
+    
+    const tempMessage = {
       id: Date.now(),
       userId: user?.uid || 'me',
-      username: userProfile?.username || 'You',
+      username,
       message: newMessage,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
-
-    setChatMessages([...chatMessages, message]);
+    
+    setChatMessages(prev => [...prev, tempMessage]);
+    
+    try {
+      await chatService.sendMessage(
+        'waitingRooms',
+        roomId,
+        user?.uid || 'me',
+        username,
+        newMessage
+      );
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+    
     setNewMessage('');
   };
 
-  const handleSendGif = (gifUrl) => {
-    const message = {
+  const handleSendGif = async (gifUrl) => {
+    if (!roomId) return;
+
+    const username = userProfile?.username || user?.displayName || 'Anonymous';
+    
+    const tempMessage = {
       id: Date.now(),
       userId: user?.uid || 'me',
-      username: userProfile?.username || 'You',
+      username,
       message: '',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isGif: true,
       gifUrl
     };
-
-    setChatMessages([...chatMessages, message]);
+    
+    setChatMessages(prev => [...prev, tempMessage]);
+    
+    try {
+      await chatService.sendMessage(
+        'waitingRooms',
+        roomId,
+        user?.uid || 'me',
+        username,
+        '',
+        true,
+        gifUrl
+      );
+    } catch (error) {
+      console.error('Failed to send GIF:', error);
+    }
+    
     setNewMessage('');
+    closeGifPicker();
   };
 
   const handleStartBattle = () => {

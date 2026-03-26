@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore, useUIStore } from '../stores/appStore';
-import { Home, MessageCircle, User, LogOut, Sparkles } from 'lucide-react';
+import { Home, MessageCircle, User, LogOut, Trophy } from 'lucide-react';
 import './Navbar.css';
 
 function Navbar() {
@@ -16,6 +16,7 @@ function Navbar() {
 
   const navItems = [
     { path: '/lobby', icon: Home, label: 'Arena' },
+    { path: '/leaderboard', icon: Trophy, label: 'Rank' },
     { path: '/messages', icon: MessageCircle, label: 'Messages' },
     { path: '/profile', icon: User, label: 'Profile' },
   ];
@@ -36,7 +37,7 @@ function Navbar() {
           ))}
           <button onClick={handleLogout} className="mobile-nav-item mobile-logout">
             <LogOut size={24} />
-            <span>Sign Out</span>
+            <span>Out</span>
           </button>
         </div>
       )}

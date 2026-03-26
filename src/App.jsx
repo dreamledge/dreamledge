@@ -7,6 +7,7 @@ import Lobby from './pages/Lobby';
 import Arena from './pages/Arena';
 import Profile from './pages/Profile';
 import Messages from './pages/Messages';
+import Leaderboard from './pages/Leaderboard';
 import WaitingRoom from './pages/WaitingRoom';
 import './App.css';
 
@@ -75,6 +76,7 @@ function App() {
                 <Messages />
               </ProtectedRoute>
             } />
+            <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore, useBattleStore, useUIStore } from '../stores/appStore';
+import { chatService } from '../services/chatService';
 import { Mic, Gavel, Users, Copy, Check, Send, X, Video, VideoOff, MicOff, Timer, Trophy, Volume2, Play, Pause, Heart } from 'lucide-react';
 import GifPicker from '../components/GifPicker';
 import './Arena.css';
@@ -20,7 +21,7 @@ function Arena() {
   const navigate = useNavigate();
   const { user, userProfile } = useAuthStore();
   const { userRole } = useBattleStore();
-  const { isGifPickerOpen, toggleGifPicker } = useUIStore();
+  const { isGifPickerOpen, toggleGifPicker, closeGifPicker } = useUIStore();
   const [battle, setBattle] = useState(DEMO_BATTLE);
   const [chatMessages, setChatMessages] = useState([
     { id: 1, userId: '1', username: 'MC_Flow', message: 'Let\'s gooo! 🔥', time: '2:35 PM', isGif: false },
@@ -38,6 +39,18 @@ function Arena() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
+
+  useEffect(() => {
+    if (!battleId) return;
+    
+    const unsubscribe = chatService.subscribeToMessages('arenas', battleId, (realTimeMessages) => {
+      if (realTimeMessages.length > 0) {
+        setChatMessages(realTimeMessages);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [battleId]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -58,36 +71,71 @@ function Arena() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !battleId) return;
 
-    const message = {
+    const username = userProfile?.username || user?.displayName || 'Anonymous';
+    
+    const tempMessage = {
       id: Date.now(),
       userId: user?.uid || 'me',
-      username: userProfile?.username || 'You',
+      username,
       message: newMessage,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isGif: false
     };
-
-    setChatMessages([...chatMessages, message]);
+    
+    setChatMessages(prev => [...prev, tempMessage]);
+    
+    try {
+      await chatService.sendMessage(
+        'arenas',
+        battleId,
+        user?.uid || 'me',
+        username,
+        newMessage
+      );
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+    
     setNewMessage('');
   };
 
-  const handleSendGif = (gifUrl) => {
-    const message = {
+  const handleSendGif = async (gifUrl) => {
+    if (!battleId) return;
+
+    const username = userProfile?.username || user?.displayName || 'Anonymous';
+    
+    const tempMessage = {
       id: Date.now(),
       userId: user?.uid || 'me',
-      username: userProfile?.username || 'You',
+      username,
       message: '',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isGif: true,
       gifUrl
     };
-
-    setChatMessages([...chatMessages, message]);
+    
+    setChatMessages(prev => [...prev, tempMessage]);
+    
+    try {
+      await chatService.sendMessage(
+        'arenas',
+        battleId,
+        user?.uid || 'me',
+        username,
+        '',
+        true,
+        gifUrl
+      );
+    } catch (error) {
+      console.error('Failed to send GIF:', error);
+    }
+    
     setNewMessage('');
+    closeGifPicker();
   };
 
   const getPhaseLabel = (phase) => {

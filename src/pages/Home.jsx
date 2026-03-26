@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
 import { signInWithGoogle } from '../services/firebase';
-import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Chrome } from 'lucide-react';
+import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Chrome, Trophy } from 'lucide-react';
 import './Home.css';
 
 function Home() {
@@ -97,6 +97,10 @@ function Home() {
           <Sparkles className="logo-icon" />
           <span>Dreamledge</span>
         </div>
+        <button className="header-leaderboard" onClick={() => navigate('/leaderboard')}>
+          <Trophy size={18} />
+          <span>Rankings</span>
+        </button>
       </header>
 
       <main className="home-main">

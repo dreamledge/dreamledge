@@ -192,6 +192,22 @@
   min-height: 56px;
 }
 
+.btn-outline {
+  background: transparent;
+  color: var(--text-primary);
+  border: 2px solid var(--accent-red);
+}
+
+.btn-outline:hover {
+  background: var(--accent-red);
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+
+.btn-outline:active {
+  transform: translateY(0);
+}
+
 .btn-sm {
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
