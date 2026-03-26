@@ -155,20 +155,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 0.5rem;
 }
 
 .preview-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  padding: 2rem;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  min-width: 140px;
+  gap: 0.75rem;
+  min-width: 110px;
+  flex-shrink: 0;
   transition: all var(--transition-base);
 }
 
@@ -179,14 +182,21 @@
 }
 
 .preview-avatar {
-  width: 72px;
-  height: 72px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-lg);
   background: var(--bg-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
+}
+
+@media (min-width: 768px) {
+  .preview-avatar {
+    width: 72px;
+    height: 72px;
+  }
 }
 
 .preview-card.artist-1 .preview-avatar {
@@ -208,11 +218,28 @@
 }
 
 .preview-vs {
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 800;
   font-style: italic;
   color: var(--accent-red);
   text-shadow: 0 0 20px var(--accent-red-glow);
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .battle-preview {
+    gap: 1.5rem;
+  }
+  
+  .preview-card {
+    padding: 2rem;
+    min-width: 140px;
+    gap: 1rem;
+  }
+  
+  .preview-vs {
+    font-size: 1.5rem;
+  }
 }
 
 .features {
