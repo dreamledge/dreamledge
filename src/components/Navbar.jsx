@@ -1,12 +1,12 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore, useUIStore } from '../stores/appStore';
-import { Home, Swords, MessageCircle, User, LogOut, Menu, X, Sparkles } from 'lucide-react';
+import { Home, MessageCircle, User, LogOut, PlusCircle, Sparkles } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import './Navbar.css';
 
 function Navbar() {
   const { isAuthenticated, user, logout } = useAuthStore();
-  const { isSidebarOpen, toggleSidebar, closeSidebar } = useUIStore();
+  const { isSidebarOpen, closeSidebar } = useUIStore();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
 
@@ -35,6 +35,12 @@ function Navbar() {
     closeSidebar();
   };
 
+  const navItems = [
+    { path: '/lobby', icon: Home, label: 'Arena' },
+    { path: '/messages', icon: MessageCircle, label: 'Messages' },
+    { path: '/profile', icon: User, label: 'Profile' },
+  ];
+
   return (
     <>
       <nav className={`navbar ${scrolled ? 'navbar-scrolled' : ''}`}>
@@ -45,54 +51,38 @@ function Navbar() {
           </NavLink>
 
           {isAuthenticated && (
-            <>
-              <div className="navbar-links">
-                <NavLink to="/lobby" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-                  <Home size={20} />
-                  <span>Arena</span>
+            <div className="navbar-links">
+              {navItems.map(item => (
+                <NavLink 
+                  key={item.path} 
+                  to={item.path} 
+                  className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}
+                >
+                  <item.icon size={20} />
+                  <span>{item.label}</span>
                 </NavLink>
-                <NavLink to="/messages" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-                  <MessageCircle size={20} />
-                  <span>Messages</span>
-                </NavLink>
-                <NavLink to="/profile" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-                  <User size={20} />
-                  <span>Profile</span>
-                </NavLink>
-                <button onClick={handleLogout} className="navbar-link navbar-link-logout">
-                  <LogOut size={20} />
-                  <span>Sign Out</span>
-                </button>
-              </div>
-
-              <button className="navbar-mobile-toggle" onClick={toggleSidebar}>
-                {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+              ))}
+              <button onClick={handleLogout} className="navbar-link navbar-link-logout">
+                <LogOut size={20} />
+                <span>Sign Out</span>
               </button>
-            </>
+            </div>
           )}
         </div>
       </nav>
 
       {isAuthenticated && (
-        <div className={`navbar-mobile-menu ${isSidebarOpen ? 'open' : ''}`}>
-          <div className="navbar-mobile-links">
-            <NavLink to="/lobby" className={({ isActive }) => `navbar-mobile-link ${isActive ? 'active' : ''}`} onClick={closeSidebar}>
-              <Home size={24} />
-              <span>Arena</span>
+        <div className="mobile-nav">
+          {navItems.map(item => (
+            <NavLink 
+              key={item.path} 
+              to={item.path} 
+              className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}
+            >
+              <item.icon size={24} />
+              <span>{item.label}</span>
             </NavLink>
-            <NavLink to="/messages" className={({ isActive }) => `navbar-mobile-link ${isActive ? 'active' : ''}`} onClick={closeSidebar}>
-              <MessageCircle size={24} />
-              <span>Messages</span>
-            </NavLink>
-            <NavLink to="/profile" className={({ isActive }) => `navbar-mobile-link ${isActive ? 'active' : ''}`} onClick={closeSidebar}>
-              <User size={24} />
-              <span>Profile</span>
-            </NavLink>
-            <button className="navbar-mobile-link" onClick={handleLogout}>
-              <LogOut size={24} />
-              <span>Sign Out</span>
-            </button>
-          </div>
+          ))}
         </div>
       )}
     </>
