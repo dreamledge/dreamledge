@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, X, TrendingUp, Loader2 } from 'lucide-react';
 import './GifPicker.css';
 
-const GIPHY_API_KEY = 'dc6zaTOxFJmzC';
+const GIPHY_API_KEY = 'qYl52xlnZyVb0oLhm9Tz8KlUn3wOlUsn';
 
 function GifPicker({ onSelect, onClose }) {
   const [searchQuery, setSearchQuery] = useState('');
