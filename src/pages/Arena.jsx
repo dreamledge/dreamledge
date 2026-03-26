@@ -99,7 +99,7 @@ function Arena() {
     } catch (error) {
       console.error('Failed to send message:', error);
     }
-    
+
     setNewMessage('');
   };
 
