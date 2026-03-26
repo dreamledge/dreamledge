@@ -77,7 +77,7 @@ function Messages() {
       if (realTimeMessages.length > 0) {
         setMessages(realTimeMessages);
         setIsConnected(true);
-      } else {
+      } else if (messages.length === 0) {
         setIsConnected(false);
       }
     });

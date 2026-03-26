@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
 import { signInWithGoogle } from '../services/firebase';
+import { userService } from '../services/userService';
 import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Chrome, Trophy } from 'lucide-react';
 import './Home.css';
 
 function Home() {
   const navigate = useNavigate();
-  const { setUser, setLoading, isAuthenticated } = useAuthStore();
+  const { setUser, setUserProfile, setLoading, isAuthenticated } = useAuthStore();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoadingState] = useState(false);
   const [error, setError] = useState('');
@@ -26,31 +27,23 @@ function Home() {
     setError('');
     setLoadingState(true);
     try {
-      // Try actual Firebase Google sign-in first
       const result = await signInWithGoogle();
-      const user = {
+      const firebaseUser = {
         uid: result.user.uid,
         email: result.user.email,
         displayName: result.user.displayName,
         photoURL: result.user.photoURL,
       };
-      setUser(user);
+      
+      const userProfile = await userService.createOrUpdateUser(firebaseUser);
+      
+      setUser(firebaseUser);
+      setUserProfile(userProfile);
       setLoading(false);
       navigate('/lobby');
     } catch (err) {
-      // If Firebase fails, use demo mode for testing
-      console.log('Using demo mode for Google sign-in');
-      const demoUser = {
-        uid: `google_user_${Date.now()}`,
-        email: 'demo@gmail.com',
-        displayName: 'Demo User',
-        photoURL: null,
-        isGoogle: true
-      };
-      setUser(demoUser);
-      setLoading(false);
-      navigate('/lobby');
-    } finally {
+      console.error('Google sign-in error:', err);
+      setError('Failed to sign in. Please check Firebase configuration.');
       setLoadingState(false);
     }
   };

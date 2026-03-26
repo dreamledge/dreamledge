@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
+import { userService } from '../services/userService';
 import { User, Mail, Calendar, Edit2, Camera, Save, X, Check, AlertCircle } from 'lucide-react';
 import './Profile.css';
 
@@ -9,8 +10,10 @@ function Profile() {
   const { user, userProfile, setUserProfile } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
   const [formData, setFormData] = useState({
     username: '',
     bio: '',
@@ -24,9 +27,9 @@ function Profile() {
     }
     
     setFormData({
-      username: userProfile?.username || user?.displayName || '',
+      username: userProfile?.displayName || user?.displayName || '',
       bio: userProfile?.bio || '',
-      avatarUrl: userProfile?.avatarUrl || '',
+      avatarUrl: userProfile?.photoURL || user?.photoURL || '',
     });
   }, [user, userProfile, navigate]);
 
@@ -34,6 +37,38 @@ function Profile() {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     setError('');
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be less than 5MB');
+      return;
+    }
+
+    setIsUploading(true);
+    setError('');
+
+    try {
+      const downloadURL = await userService.uploadProfilePicture(user.uid, file);
+      setFormData(prev => ({ ...prev, avatarUrl: downloadURL }));
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError('Failed to upload image');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -47,18 +82,23 @@ function Profile() {
       return;
     }
 
+    if (!user) return;
+
     setIsSaving(true);
     setError('');
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      await userService.updateUserProfile(user.uid, {
+        displayName: formData.username,
+        bio: formData.bio,
+        photoURL: formData.avatarUrl,
+      });
+
       const updatedProfile = {
         ...userProfile,
-        username: formData.username,
+        displayName: formData.username,
         bio: formData.bio,
-        avatarUrl: formData.avatarUrl,
-        lastUpdated: Date.now()
+        photoURL: formData.avatarUrl,
       };
       
       setUserProfile(updatedProfile);
@@ -66,6 +106,7 @@ function Profile() {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) {
+      console.error('Save error:', err);
       setError('Failed to save profile');
     } finally {
       setIsSaving(false);
@@ -74,21 +115,19 @@ function Profile() {
 
   const handleCancel = () => {
     setFormData({
-      username: userProfile?.username || user?.displayName || '',
+      username: userProfile?.displayName || user?.displayName || '',
       bio: userProfile?.bio || '',
-      avatarUrl: userProfile?.avatarUrl || '',
+      avatarUrl: userProfile?.photoURL || user?.photoURL || '',
     });
     setIsEditing(false);
     setError('');
   };
 
-  const handleAvatarChange = () => {
-    const colors = [
-      '#e63946', '#2ecc71', '#3498db', '#9b59b6', 
-      '#f39c12', '#1abc9c', '#e74c3c', '#34495e'
-    ];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
-    setFormData(prev => ({ ...prev, avatarUrl: randomColor }));
+  const getAvatarStyle = () => {
+    if (formData.avatarUrl && formData.avatarUrl.startsWith('http')) {
+      return { backgroundImage: `url(${formData.avatarUrl})`, backgroundSize: 'cover' };
+    }
+    return { background: formData.avatarUrl || 'var(--accent-red)' };
   };
 
   return (
@@ -105,15 +144,30 @@ function Profile() {
           <div className="profile-avatar-section">
             <div 
               className="profile-avatar"
-              style={{ background: formData.avatarUrl || 'var(--accent-red)' }}
+              style={getAvatarStyle()}
             >
-              {formData.username ? formData.username.charAt(0).toUpperCase() : '?'}
+              {!formData.avatarUrl?.startsWith('http') && formData.username ? formData.username.charAt(0).toUpperCase() : ''}
             </div>
             {isEditing && (
-              <button className="avatar-edit-btn" onClick={handleAvatarChange}>
-                <Camera size={18} />
+              <button 
+                className="avatar-edit-btn" 
+                onClick={handleAvatarClick}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <div className="loading-spinner small" />
+                ) : (
+                  <Camera size={18} />
+                )}
               </button>
             )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+            />
           </div>
 
           <div className="profile-info">
