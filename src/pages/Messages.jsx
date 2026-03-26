@@ -166,7 +166,6 @@ function Messages() {
     }
     
     setNewMessage('');
-    closeGifPicker();
   };
 
   const handleCreateRoom = async () => {

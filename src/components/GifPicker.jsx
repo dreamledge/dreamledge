@@ -54,6 +54,7 @@ function GifPicker({ onSelect, onClose }) {
 
   const handleSelect = (gifUrl) => {
     onSelect(gifUrl);
+    onClose();
   };
 
   return (

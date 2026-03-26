@@ -135,7 +135,6 @@ function Arena() {
     }
     
     setNewMessage('');
-    closeGifPicker();
   };
 
   const getPhaseLabel = (phase) => {

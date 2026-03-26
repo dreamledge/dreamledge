@@ -120,7 +120,6 @@ function WaitingRoom() {
     }
     
     setNewMessage('');
-    closeGifPicker();
   };
 
   const handleStartBattle = () => {
