@@ -104,6 +104,9 @@ function Messages() {
     e.preventDefault();
     if (!newMessage.trim() || !selectedConversation) return;
 
+    const messageText = newMessage;
+    setNewMessage('');
+
     const chatType = selectedConversation.type === 'room' ? 'rooms' : 'dms';
     const username = userProfile?.username || user?.displayName || 'Anonymous';
     
@@ -111,7 +114,7 @@ function Messages() {
       id: Date.now(),
       userId: user?.uid || 'me',
       username,
-      message: newMessage,
+      message: messageText,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isGif: false
     };
@@ -124,13 +127,11 @@ function Messages() {
         selectedConversation.id,
         user?.uid || 'me',
         username,
-        newMessage
+        messageText
       );
     } catch (error) {
       console.error('Failed to send message:', error);
     }
-
-    setNewMessage('');
   };
 
   const handleSendGif = async (gifUrl) => {

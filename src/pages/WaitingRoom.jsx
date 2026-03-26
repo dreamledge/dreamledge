@@ -61,13 +61,16 @@ function WaitingRoom() {
     e.preventDefault();
     if (!newMessage.trim() || !roomId) return;
 
+    const messageText = newMessage;
+    setNewMessage('');
+
     const username = userProfile?.username || user?.displayName || 'Anonymous';
     
     const tempMessage = {
       id: Date.now(),
       userId: user?.uid || 'me',
       username,
-      message: newMessage,
+      message: messageText,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     
@@ -79,13 +82,11 @@ function WaitingRoom() {
         roomId,
         user?.uid || 'me',
         username,
-        newMessage
+        messageText
       );
     } catch (error) {
       console.error('Failed to send message:', error);
     }
-
-    setNewMessage('');
   };
 
   const handleSendGif = async (gifUrl) => {
