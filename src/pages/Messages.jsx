@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/appStore';
+import { useAuthStore, useUIStore } from '../stores/appStore';
 import { Search, Plus, Send, Users, MessageCircle, Hash, ArrowLeft, X, Check } from 'lucide-react';
+import GifPicker from '../components/GifPicker';
 import './Messages.css';
 
 const DEMO_CONVERSATIONS = [
@@ -37,6 +38,7 @@ function Messages() {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const { user, userProfile } = useAuthStore();
+  const { isGifPickerOpen, toggleGifPicker } = useUIStore();
   const [conversations, setConversations] = useState(DEMO_CONVERSATIONS);
   const [rooms, setRooms] = useState(DEMO_ROOMS);
   const [activeTab, setActiveTab] = useState(conversationId ? 'chat' : 'dms');
@@ -88,6 +90,21 @@ function Messages() {
       username: userProfile?.username || 'You',
       message: newMessage,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages([...messages, message]);
+    setNewMessage('');
+  };
+
+  const handleSendGif = (gifUrl) => {
+    const message = {
+      id: Date.now(),
+      userId: user?.uid || 'me',
+      username: userProfile?.username || 'You',
+      message: '',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isGif: true,
+      gifUrl
     };
 
     setMessages([...messages, message]);
@@ -169,6 +186,7 @@ function Messages() {
               <button 
                 type="button" 
                 className="gif-toggle"
+                onClick={toggleGifPicker}
               >
                 GIF
               </button>
@@ -183,6 +201,12 @@ function Messages() {
                 <Send size={20} />
               </button>
             </form>
+            {isGifPickerOpen && (
+              <GifPicker 
+                onSelect={handleSendGif} 
+                onClose={toggleGifPicker}
+              />
+            )}
           </div>
         ) : (
           <>

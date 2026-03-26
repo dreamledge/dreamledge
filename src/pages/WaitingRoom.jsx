@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuthStore, useBattleStore } from '../stores/appStore';
+import { useAuthStore, useBattleStore, useUIStore } from '../stores/appStore';
 import { Mic, Gavel, Users, Copy, Check, Send, X, Video, VideoOff, MicOff, Mic as MicOn } from 'lucide-react';
+import GifPicker from '../components/GifPicker';
 import './WaitingRoom.css';
 
 const DEMO_PARTICIPANTS = [
@@ -16,6 +17,7 @@ function WaitingRoom() {
   const navigate = useNavigate();
   const { user, userProfile } = useAuthStore();
   const { userRole, isHost, setParticipants } = useBattleStore();
+  const { isGifPickerOpen, toggleGifPicker } = useUIStore();
   const [participants, setLocalParticipants] = useState(DEMO_PARTICIPANTS);
   const [chatMessages, setChatMessages] = useState([
     { id: 1, userId: '1', username: 'MC_Flow', message: 'Ready to drop some heat! 🔥', time: '2:30 PM' },
@@ -52,6 +54,21 @@ function WaitingRoom() {
       username: userProfile?.username || 'You',
       message: newMessage,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setChatMessages([...chatMessages, message]);
+    setNewMessage('');
+  };
+
+  const handleSendGif = (gifUrl) => {
+    const message = {
+      id: Date.now(),
+      userId: user?.uid || 'me',
+      username: userProfile?.username || 'You',
+      message: '',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isGif: true,
+      gifUrl
     };
 
     setChatMessages([...chatMessages, message]);
@@ -192,7 +209,7 @@ function WaitingRoom() {
               <button 
                 type="button" 
                 className="gif-toggle"
-                onClick={() => {}}
+                onClick={toggleGifPicker}
               >
                 GIF
               </button>
@@ -207,6 +224,12 @@ function WaitingRoom() {
                 <Send size={18} />
               </button>
             </form>
+            {isGifPickerOpen && (
+              <GifPicker 
+                onSelect={handleSendGif} 
+                onClose={toggleGifPicker}
+              />
+            )}
           </aside>
         </div>
 
