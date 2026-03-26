@@ -1,37 +1,52 @@
 import { useState } from 'react';
-import { Search, X, TrendingUp } from 'lucide-react';
+import { Search, X, TrendingUp, Smile } from 'lucide-react';
 import './GifPicker.css';
 
 const DEMO_GIFS = [
-  'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif',
-  'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif',
-  'https://media.giphy.com/media/l3q2XhfQ8oCkm1Ts4/giphy.gif',
-  'https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif',
-  'https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy.gif',
-  'https://media.giphy.com/media/3o7btPCcdNniyf0ArS/giphy.gif',
-  'https://media.giphy.com/media/l0Iy69RBwtdmpepitw/giphy.gif',
-  'https://media.giphy.com/media/xT9DPIBYf0pAviBLzO/giphy.gif',
+  'https://media.tenor.com/1a2b3c4d5e6f-AAABAAAAAAMAAAADAAAAAAEAAQAAAA==/tenor.gif',
+  'https://media.tenor.com/images/tenor.gif',
 ];
 
-const SEARCH_GIFS = [
-  'https://media.giphy.com/media/l4FGuhL4U2WyjdkaY/giphy.gif',
-  'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif',
-  'https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif',
-  'https://media.giphy.com/media/3oz8xIsloV7zOmt81G/giphy.gif',
-  'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif',
-  'https://media.giphy.com/media/3o7bu3XilJ5BOiSGic/giphy.gif',
+const FALLBACK_GIFS = [
+  'https://media1.tenor.com/m/anime-cute-happy-stars.gif',
+  'https://media1.tenor.com/m/anime-cute-kawaii-wave.gif', 
+  'https://media1.tenor.com/m/anime-girl-wink.gif',
+  'https://media1.tenor.com/m/anime-excited.gif',
+  'https://media1.tenor.com/m/anime-happy-laugh.gif',
+  'https://media1.tenor.com/m/anime-blush.gif',
+  'https://media1.tenor.com/m/anime-dance.gif',
+  'https://media1.tenor.com/m/anime-smile.gif',
+  'https://media1.tenor.com/m/anime-wave.gif',
+  'https://media1.tenor.com/m/anime-thumbs-up.gif',
+  'https://media1.tenor.com/m/anime-cool.gif',
+  'https://media1.tenor.com/m/anime-heart-eyes.gif',
+];
+
+const EMOJI_GIFS = [
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🔥</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">😂</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">❤️</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🔥</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">😤</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">💯</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎤</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⚡</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🏆</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">💀</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">👏</text></svg>',
+  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🙌</text></svg>',
 ];
 
 function GifPicker({ onSelect, onClose }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [gifs, setGifs] = useState(DEMO_GIFS);
+  const [gifs, setGifs] = useState(FALLBACK_GIFS);
 
   const handleSearch = (query) => {
     setSearchQuery(query);
     if (query.length > 2) {
-      setGifs(SEARCH_GIFS);
+      setGifs([...EMOJI_GIFS]);
     } else {
-      setGifs(DEMO_GIFS);
+      setGifs(FALLBACK_GIFS);
     }
   };
 
@@ -63,7 +78,7 @@ function GifPicker({ onSelect, onClose }) {
       <div className="gif-section">
         <div className="gif-section-title">
           <TrendingUp size={14} />
-          {searchQuery ? 'Search Results' : 'Trending'}
+          {searchQuery ? 'Emoji Reactions' : 'Trending'}
         </div>
         <div className="gif-grid">
           {gifs.map((gif, index) => (
@@ -79,7 +94,7 @@ function GifPicker({ onSelect, onClose }) {
       </div>
       
       <div className="gif-picker-footer">
-        <span>GIPHY</span>
+        <span>GIFs & Reactions</span>
       </div>
     </div>
   );
