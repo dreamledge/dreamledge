@@ -42,8 +42,14 @@ function Home() {
       setLoading(false);
       navigate('/lobby');
     } catch (err) {
-      console.error('Google sign-in error:', err);
-      setError('Failed to sign in. Please check Firebase configuration.');
+      console.error('Full error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+      
+      const errorInfo = err.code ? `${err.code}: ${err.message}` : err.message;
+      alert('Google Sign-In Error:\n\n' + errorInfo);
+      setError('Failed to sign in: ' + errorInfo);
       setLoadingState(false);
     }
   };
