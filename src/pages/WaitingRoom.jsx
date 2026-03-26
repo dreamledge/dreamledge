@@ -189,6 +189,13 @@ function WaitingRoom() {
               <div ref={chatEndRef} />
             </div>
             <form className="chat-input-form" onSubmit={handleSendMessage}>
+              <button 
+                type="button" 
+                className="gif-toggle"
+                onClick={() => {}}
+              >
+                GIF
+              </button>
               <input
                 type="text"
                 className="input chat-input"

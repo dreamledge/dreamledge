@@ -166,6 +166,12 @@ function Messages() {
             </div>
 
             <form className="chat-view-input" onSubmit={handleSendMessage}>
+              <button 
+                type="button" 
+                className="gif-toggle"
+              >
+                GIF
+              </button>
               <input
                 type="text"
                 className="input"
