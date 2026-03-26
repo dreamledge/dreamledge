@@ -142,6 +142,16 @@
   font-weight: 600;
 }
 
+.mobile-logout {
+  color: var(--error);
+}
+
+.mobile-logout:hover,
+.mobile-logout:active {
+  color: var(--error);
+  opacity: 0.8;
+}
+
 /* Adjust main content for mobile nav */
 .main-content {
   padding-bottom: 70px;
