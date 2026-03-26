@@ -1,63 +1,45 @@
 import { useState } from 'react';
-import { Search, X, TrendingUp, Smile } from 'lucide-react';
+import { Search, X, TrendingUp, Smile, Heart, Flame, Music, Trophy, PartyPopper } from 'lucide-react';
 import './GifPicker.css';
 
-const DEMO_GIFS = [
-  'https://media.tenor.com/1a2b3c4d5e6f-AAABAAAAAAMAAAADAAAAAAEAAQAAAA==/tenor.gif',
-  'https://media.tenor.com/images/tenor.gif',
-];
-
-const FALLBACK_GIFS = [
-  'https://media1.tenor.com/m/anime-cute-happy-stars.gif',
-  'https://media1.tenor.com/m/anime-cute-kawaii-wave.gif', 
-  'https://media1.tenor.com/m/anime-girl-wink.gif',
-  'https://media1.tenor.com/m/anime-excited.gif',
-  'https://media1.tenor.com/m/anime-happy-laugh.gif',
-  'https://media1.tenor.com/m/anime-blush.gif',
-  'https://media1.tenor.com/m/anime-dance.gif',
-  'https://media1.tenor.com/m/anime-smile.gif',
-  'https://media1.tenor.com/m/anime-wave.gif',
-  'https://media1.tenor.com/m/anime-thumbs-up.gif',
-  'https://media1.tenor.com/m/anime-cool.gif',
-  'https://media1.tenor.com/m/anime-heart-eyes.gif',
-];
-
-const EMOJI_GIFS = [
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🔥</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">😂</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">❤️</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🔥</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">😤</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">💯</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎤</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⚡</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🏆</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">💀</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">👏</text></svg>',
-  'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🙌</text></svg>',
+const POPULAR_REACTIONS = [
+  { id: 1, emoji: '🔥', label: 'fire' },
+  { id: 2, emoji: '😂', label: 'laugh' },
+  { id: 3, emoji: '❤️', label: 'love' },
+  { id: 4, emoji: '🤣', label: 'rofl' },
+  { id: 5, emoji: '😤', label: 'mad' },
+  { id: 6, emoji: '💯', label: '100' },
+  { id: 7, emoji: '🎤', label: 'mic' },
+  { id: 8, emoji: '⚡', label: 'lit' },
+  { id: 9, emoji: '🏆', label: 'win' },
+  { id: 10, emoji: '💀', label: 'dead' },
+  { id: 11, emoji: '👏', label: 'clap' },
+  { id: 12, emoji: '🙌', label: 'hands' },
+  { id: 13, emoji: '😎', label: 'cool' },
+  { id: 14, emoji: '🤔', label: 'hmm' },
+  { id: 15, emoji: '👀', label: 'eyes' },
+  { id: 16, emoji: '💪', label: 'strong' },
+  { id: 17, emoji: '😱', label: 'shocked' },
+  { id: 18, emoji: '🥳', label: 'party' },
 ];
 
 function GifPicker({ onSelect, onClose }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [gifs, setGifs] = useState(FALLBACK_GIFS);
+  const [searchFocused, setSearchFocused] = useState(false);
 
-  const handleSearch = (query) => {
-    setSearchQuery(query);
-    if (query.length > 2) {
-      setGifs([...EMOJI_GIFS]);
-    } else {
-      setGifs(FALLBACK_GIFS);
-    }
-  };
+  const filteredReactions = searchQuery.length > 1 
+    ? POPULAR_REACTIONS.filter(r => r.label.includes(searchQuery.toLowerCase().slice(0, 3)))
+    : POPULAR_REACTIONS;
 
-  const handleSelect = (gifUrl) => {
-    onSelect(gifUrl);
+  const handleSelect = (emoji) => {
+    const svgDataUri = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">${emoji}</text></svg>`;
+    onSelect(svgDataUri);
   };
 
   return (
     <div className="gif-picker">
       <div className="gif-picker-header">
-        <h3>Choose a GIF</h3>
+        <h3>Reactions</h3>
         <button className="gif-close" onClick={onClose}>
           <X size={18} />
         </button>
@@ -67,34 +49,36 @@ function GifPicker({ onSelect, onClose }) {
         <Search size={18} className="search-icon" />
         <input
           type="text"
-          placeholder="Search GIFs..."
+          inputMode={searchFocused ? 'text' : 'none'}
+          placeholder={searchFocused ? "Search..." : "Tap to search"}
           value={searchQuery}
-          onChange={(e) => handleSearch(e.target.value)}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
           className="gif-search-input"
-          autoFocus
         />
       </div>
 
       <div className="gif-section">
         <div className="gif-section-title">
           <TrendingUp size={14} />
-          {searchQuery ? 'Emoji Reactions' : 'Trending'}
+          {searchQuery ? 'Results' : 'Popular'}
         </div>
-        <div className="gif-grid">
-          {gifs.map((gif, index) => (
+        <div className="emoji-grid">
+          {filteredReactions.map((reaction) => (
             <button
-              key={index}
-              className="gif-item"
-              onClick={() => handleSelect(gif)}
+              key={reaction.id}
+              className="emoji-item"
+              onClick={() => handleSelect(reaction.emoji)}
             >
-              <img src={gif} alt={`GIF ${index + 1}`} />
+              <span className="emoji-large">{reaction.emoji}</span>
             </button>
           ))}
         </div>
       </div>
       
       <div className="gif-picker-footer">
-        <span>GIFs & Reactions</span>
+        <span>Emoji Reactions</span>
       </div>
     </div>
   );
