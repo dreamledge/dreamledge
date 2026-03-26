@@ -1,45 +1,63 @@
-import { useState } from 'react';
-import { Search, X, TrendingUp, Smile, Heart, Flame, Music, Trophy, PartyPopper } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, X, TrendingUp, Loader2 } from 'lucide-react';
 import './GifPicker.css';
 
-const POPULAR_REACTIONS = [
-  { id: 1, emoji: '🔥', label: 'fire' },
-  { id: 2, emoji: '😂', label: 'laugh' },
-  { id: 3, emoji: '❤️', label: 'love' },
-  { id: 4, emoji: '🤣', label: 'rofl' },
-  { id: 5, emoji: '😤', label: 'mad' },
-  { id: 6, emoji: '💯', label: '100' },
-  { id: 7, emoji: '🎤', label: 'mic' },
-  { id: 8, emoji: '⚡', label: 'lit' },
-  { id: 9, emoji: '🏆', label: 'win' },
-  { id: 10, emoji: '💀', label: 'dead' },
-  { id: 11, emoji: '👏', label: 'clap' },
-  { id: 12, emoji: '🙌', label: 'hands' },
-  { id: 13, emoji: '😎', label: 'cool' },
-  { id: 14, emoji: '🤔', label: 'hmm' },
-  { id: 15, emoji: '👀', label: 'eyes' },
-  { id: 16, emoji: '💪', label: 'strong' },
-  { id: 17, emoji: '😱', label: 'shocked' },
-  { id: 18, emoji: '🥳', label: 'party' },
-];
+const TENOR_API_KEY = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCY';
 
 function GifPicker({ onSelect, onClose }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [gifs, setGifs] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  const filteredReactions = searchQuery.length > 1 
-    ? POPULAR_REACTIONS.filter(r => r.label.includes(searchQuery.toLowerCase().slice(0, 3)))
-    : POPULAR_REACTIONS;
+  useEffect(() => {
+    fetchGifs('trending');
+  }, []);
 
-  const handleSelect = (emoji) => {
-    const svgDataUri = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">${emoji}</text></svg>`;
-    onSelect(svgDataUri);
+  const fetchGifs = async (type, query = '') => {
+    setLoading(true);
+    try {
+      let url = `https://tenor.googleapis.com/v2/${type}?key=${TENOR_API_KEY}&limit=20&media_filter=gif,tinygif`;
+      if (query) {
+        url = `https://tenor.googleapis.com/v2/search?key=${TENOR_API_KEY}&q=${encodeURIComponent(query)}&limit=20&media_filter=gif,tinygif`;
+      }
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.results) {
+        const formattedGifs = data.results.map(gif => ({
+          id: gif.id,
+          url: gif.media_formats?.tinygif?.url || gif.media_formats?.gif?.url,
+          preview: gif.media_formats?.tinygif?.url || gif.media_formats?.gif?.url
+        })).filter(g => g.url);
+        setGifs(formattedGifs);
+      }
+    } catch (error) {
+      console.error('Error fetching GIFs:', error);
+      setGifs([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    if (query.length > 1) {
+      fetchGifs('search', query);
+    } else if (query.length === 0) {
+      fetchGifs('trending');
+    }
+  };
+
+  const handleSelect = (gifUrl) => {
+    onSelect(gifUrl);
   };
 
   return (
     <div className="gif-picker">
       <div className="gif-picker-header">
-        <h3>Reactions</h3>
+        <h3>Choose a GIF</h3>
         <button className="gif-close" onClick={onClose}>
           <X size={18} />
         </button>
@@ -49,10 +67,10 @@ function GifPicker({ onSelect, onClose }) {
         <Search size={18} className="search-icon" />
         <input
           type="text"
-          inputMode={searchFocused ? 'text' : 'none'}
-          placeholder={searchFocused ? "Search..." : "Tap to search"}
+          inputMode={searchFocused ? 'search' : 'text'}
+          placeholder={searchFocused ? "Search GIFs..." : "Tap to search"}
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => handleSearch(e.target.value)}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
           className="gif-search-input"
@@ -62,23 +80,31 @@ function GifPicker({ onSelect, onClose }) {
       <div className="gif-section">
         <div className="gif-section-title">
           <TrendingUp size={14} />
-          {searchQuery ? 'Results' : 'Popular'}
+          {searchQuery ? 'Results' : 'Trending'}
         </div>
-        <div className="emoji-grid">
-          {filteredReactions.map((reaction) => (
-            <button
-              key={reaction.id}
-              className="emoji-item"
-              onClick={() => handleSelect(reaction.emoji)}
-            >
-              <span className="emoji-large">{reaction.emoji}</span>
-            </button>
-          ))}
-        </div>
+        
+        {loading ? (
+          <div className="gif-loading">
+            <Loader2 size={32} className="spinner" />
+            <span>Loading...</span>
+          </div>
+        ) : (
+          <div className="gif-grid">
+            {gifs.map((gif) => (
+              <button
+                key={gif.id}
+                className="gif-item"
+                onClick={() => handleSelect(gif.url)}
+              >
+                <img src={gif.preview} alt="GIF" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       
       <div className="gif-picker-footer">
-        <span>Emoji Reactions</span>
+        <span>TENOR</span>
       </div>
     </div>
   );
