@@ -395,6 +395,20 @@
   background: var(--accent-red);
 }
 
+.gif-message .message-content {
+  display: none;
+}
+
+.message-gif {
+  max-width: 200px;
+  max-height: 150px;
+  width: auto;
+  height: auto;
+  border-radius: var(--radius-md);
+  display: block;
+  object-fit: contain;
+}
+
 .chat-input-form {
   display: flex;
   gap: 0.5rem;

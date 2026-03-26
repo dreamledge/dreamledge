@@ -170,12 +170,16 @@ function Messages() {
               {messages.map(msg => (
                 <div 
                   key={msg.id} 
-                  className={`chat-view-message ${msg.userId === user?.uid || msg.userId === 'me' ? 'own' : ''}`}
+                  className={`chat-view-message ${msg.userId === user?.uid || msg.userId === 'me' ? 'own' : ''} ${msg.isGif ? 'gif-message' : ''}`}
                 >
                   {msg.userId !== 'me' && (
                     <span className="message-sender">{msg.username}</span>
                   )}
-                  <p className="message-text">{msg.message}</p>
+                  {msg.isGif ? (
+                    <img src={msg.gifUrl} alt="GIF" className="message-gif" />
+                  ) : (
+                    <p className="message-text">{msg.message}</p>
+                  )}
                   <span className="message-time">{msg.time}</span>
                 </div>
               ))}

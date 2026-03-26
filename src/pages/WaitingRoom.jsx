@@ -194,13 +194,17 @@ function WaitingRoom() {
               {chatMessages.map(msg => (
                 <div 
                   key={msg.id} 
-                  className={`chat-message ${msg.userId === user?.uid ? 'own' : ''}`}
+                  className={`chat-message ${msg.userId === user?.uid ? 'own' : ''} ${msg.isGif ? 'gif-message' : ''}`}
                 >
                   <div className="message-header">
                     <span className="message-username">{msg.username}</span>
                     <span className="message-time">{msg.time}</span>
                   </div>
-                  <p className="message-content">{msg.message}</p>
+                  {msg.isGif ? (
+                    <img src={msg.gifUrl} alt="GIF" className="message-gif" />
+                  ) : (
+                    <p className="message-content">{msg.message}</p>
+                  )}
                 </div>
               ))}
               <div ref={chatEndRef} />
