@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
 import { signInWithGoogle } from '../services/firebase';
@@ -8,7 +8,7 @@ import './Home.css';
 
 function Home() {
   const navigate = useNavigate();
-  const { setUser, setUserProfile, setLoading, isAuthenticated } = useAuthStore();
+  const { user, setUser, setUserProfile, setLoading, isAuthenticated } = useAuthStore();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoadingState] = useState(false);
   const [error, setError] = useState('');
@@ -18,10 +18,11 @@ function Home() {
     username: '',
   });
 
-  if (isAuthenticated) {
-    navigate('/lobby');
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      navigate('/lobby', { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
 
   const handleGoogleSignIn = async () => {
     setError('');
@@ -29,7 +30,6 @@ function Home() {
     
     try {
       const result = await signInWithGoogle();
-      alert('Sign-in successful! User: ' + result.user.email);
       
       const firebaseUser = {
         uid: result.user.uid,
@@ -38,16 +38,11 @@ function Home() {
         photoURL: result.user.photoURL,
       };
       
-      alert('Creating profile for: ' + firebaseUser.displayName);
       const userProfile = await userService.createOrUpdateUser(firebaseUser);
-      alert('Profile saved! Now setting state and navigating...');
       
       setUser(firebaseUser);
       setUserProfile(userProfile);
       setLoadingState(false);
-      
-      alert('About to navigate to /lobby');
-      navigate('/lobby');
     } catch (err) {
       console.error('Sign-in error:', err);
       alert('Error: ' + (err.message || err.code));
