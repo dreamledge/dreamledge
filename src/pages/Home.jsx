@@ -112,8 +112,7 @@ function Home() {
 
       <header className="home-header">
         <div className="home-logo">
-          <Sparkles className="logo-icon" />
-          <span>Dreamledge</span>
+          <img src="/logo.png" alt="Dreamledge" className="logo-img" />
         </div>
         <button className="header-leaderboard" onClick={() => navigate('/leaderboard')}>
           <Trophy size={18} />

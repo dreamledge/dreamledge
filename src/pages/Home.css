@@ -93,6 +93,12 @@
   letter-spacing: -0.02em;
 }
 
+.logo-img {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
 .logo-icon {
   color: var(--accent-red);
   width: 28px;
