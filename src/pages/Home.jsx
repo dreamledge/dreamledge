@@ -9,6 +9,7 @@ function Home() {
   const navigate = useNavigate();
   const { user, setUser, setUserProfile, setLoading, isAuthenticated } = useAuthStore();
   const [loading, setLoadingState] = useState(false);
+  const [showSignIn, setShowSignIn] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     email: '',
@@ -118,7 +119,7 @@ function Home() {
               <button 
                 className="btn btn-primary btn-lg" 
                 onClick={() => {
-                  setIsLogin(false);
+                  setShowSignIn(false);
                   document.getElementById('join-section')?.scrollIntoView({ behavior: 'smooth' });
                 }}
               >
@@ -181,29 +182,31 @@ function Home() {
           <div className="auth-card">
             <div className="auth-header">
               <h2 className="auth-title">
-                Join Dreamledge
+                {showSignIn ? 'Welcome Back' : 'Join Dreamledge'}
               </h2>
               <p className="auth-subtitle">
-                Create an account to start battling
+                {showSignIn ? 'Sign in to continue to the arena' : 'Create an account to start battling'}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="auth-form">
-              <div className="input-group">
-                <label className="input-label">
-                  <User size={16} />
-                  Username
-                </label>
-                <input
-                  type="text"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleChange}
-                  className="input"
-                  placeholder="Enter your username"
-                  required
-                />
-              </div>
+              {!showSignIn && (
+                <div className="input-group">
+                  <label className="input-label">
+                    <User size={16} />
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleChange}
+                    className="input"
+                    placeholder="Enter your username"
+                    required={!showSignIn}
+                  />
+                </div>
+              )}
 
               <div className="input-group">
                 <label className="input-label">
@@ -249,10 +252,22 @@ function Home() {
                     <span></span><span></span><span></span>
                   </span>
                 ) : (
-                  'Create Account'
+                  showSignIn ? 'Sign In' : 'Create Account'
                 )}
               </button>
             </form>
+
+            <div className="auth-footer">
+              <p>
+                {showSignIn ? "Don't have an account? " : "Already have an account? "}
+                <button 
+                  className="auth-switch"
+                  onClick={() => setShowSignIn(!showSignIn)}
+                >
+                  {showSignIn ? 'Create Account' : 'Sign In'}
+                </button>
+              </p>
+            </div>
           </div>
         </section>
       </main>
