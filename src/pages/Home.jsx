@@ -1,13 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
-import { userService } from '../services/userService';
-import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Trophy } from 'lucide-react';
+import { Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Trophy } from 'lucide-react';
 import './Home.css';
 
 function Home() {
   const navigate = useNavigate();
-  const { user, setUser, setUserProfile, setLoading, isAuthenticated } = useAuthStore();
+  const { user, setUser, setUserProfile, isAuthenticated } = useAuthStore();
   const [loading, setLoadingState] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);
   const [error, setError] = useState('');
@@ -16,12 +15,6 @@ function Home() {
     password: '',
     username: '',
   });
-
-  useEffect(() => {
-    if (isAuthenticated && user && !isLoading) {
-      navigate('/lobby', { replace: true });
-    }
-  }, [isAuthenticated, user, isLoading, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -47,48 +40,29 @@ function Home() {
     }
 
     try {
-      if (showSignIn) {
-        // Sign in - look up existing user by email
-        const existingProfile = await userService.getUserByEmail(formData.email);
-        
-        if (!existingProfile) {
-          setError('No account found with this email. Create an account first.');
-          setLoadingState(false);
-          return;
-        }
-
-        setUser({
-          uid: existingProfile.uid,
-          email: existingProfile.email,
-          displayName: existingProfile.displayName,
-          photoURL: existingProfile.photoURL,
-        });
-        setUserProfile(existingProfile);
-        setLoadingState(false);
-        navigate('/lobby');
-      } else {
-        // Sign up - create new user
-        if (!formData.username.trim()) {
-          setError('Username is required');
-          setLoadingState(false);
-          return;
-        }
-
-        const userId = `user_${Date.now()}`;
-        const newUser = {
-          uid: userId,
-          email: formData.email,
-          displayName: formData.username,
-          photoURL: null,
-        };
-        
-        const userProfile = await userService.createOrUpdateUser(newUser);
-        
-        setUser(newUser);
-        setUserProfile(userProfile);
-        setLoadingState(false);
-        navigate('/lobby');
-      }
+      // Create local user profile (works without Firestore)
+      const userId = `user_${Date.now()}`;
+      const newUser = {
+        uid: userId,
+        email: formData.email,
+        displayName: showSignIn ? formData.username : formData.username,
+        photoURL: null,
+      };
+      
+      const userProfile = {
+        uid: userId,
+        email: formData.email,
+        displayName: newUser.displayName || formData.email.split('@')[0],
+        bio: '',
+        points: 1000,
+        wins: 0,
+        createdAt: Date.now(),
+      };
+      
+setUser(newUser);
+      setUserProfile(userProfile);
+      setLoadingState(false);
+      navigate('/lobby');
     } catch (err) {
       console.error('Auth error:', err);
       setError('Failed to process request. Please try again.');
@@ -112,7 +86,7 @@ function Home() {
 
       <header className="home-header">
         <div className="home-logo">
-          <img src="/logo.png" alt="Dreamledge" className="logo-img" />
+          <span className="logo-wordmark">Dreamledge</span>
         </div>
         <button className="header-leaderboard" onClick={() => navigate('/leaderboard')}>
           <Trophy size={18} />

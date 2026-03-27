@@ -35,9 +35,12 @@ function Arena() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [volume, setVolume] = useState(80);
   const chatEndRef = useRef(null);
+  const chatMessagesRef = useRef(null);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
   }, [chatMessages]);
 
   useEffect(() => {
@@ -300,7 +303,7 @@ function Arena() {
                 24 watching
               </span>
             </div>
-            <div className="chat-messages">
+            <div className="chat-messages" ref={chatMessagesRef}>
               {chatMessages.map(msg => (
                 <div 
                   key={msg.id} 

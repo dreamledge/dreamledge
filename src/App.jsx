@@ -1,6 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './stores/appStore';
-import { useEffect, useState } from 'react';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Lobby from './pages/Lobby';
@@ -12,25 +12,8 @@ import WaitingRoom from './pages/WaitingRoom';
 import './App.css';
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, isLoading } = useAuthStore();
-  const [checked, setChecked] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setChecked(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (isLoading || !checked) {
-    return (
-      <div className="loading-screen">
-        <div className="loading-content">
-          <div className="loading-logo">Dreamledge</div>
-          <div className="loading-spinner"></div>
-        </div>
-      </div>
-    );
-  }
-
+  const { isAuthenticated } = useAuthStore();
+  
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
   }
@@ -38,16 +21,20 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-function App() {
-  const { isLoading, setLoading } = useAuthStore();
-  
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, [setLoading]);
-  
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [pathname]);
+
+  return null;
+}
+
+function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <div className="app">
         <Navbar />
         <main className="main-content">

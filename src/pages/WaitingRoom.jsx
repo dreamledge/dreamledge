@@ -2,16 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore, useBattleStore, useUIStore } from '../stores/appStore';
 import { chatService } from '../services/chatService';
+import { battleService } from '../services/battleService';
 import { Mic, Gavel, Users, Copy, Check, Send, X, Video, VideoOff, MicOff, Mic as MicOn } from 'lucide-react';
 import GifPicker from '../components/GifPicker';
 import './WaitingRoom.css';
-
-const DEMO_PARTICIPANTS = [
-  { id: '1', name: 'MC_Flow', role: 'artist', isReady: true, hasVideo: true, hasAudio: true },
-  { id: '2', name: 'LyricQueen', role: 'artist', isReady: true, hasVideo: true, hasAudio: false },
-  { id: '3', name: 'Judge_Dave', role: 'judge', isReady: true, hasVideo: true, hasAudio: true },
-  { id: '4', name: 'Judge_Maya', role: 'judge', isReady: false, hasVideo: false, hasAudio: true },
-];
 
 function WaitingRoom() {
   const { roomId } = useParams();
@@ -19,24 +13,42 @@ function WaitingRoom() {
   const { user, userProfile } = useAuthStore();
   const { userRole, isHost, setParticipants } = useBattleStore();
   const { isGifPickerOpen, toggleGifPicker, closeGifPicker } = useUIStore();
-  const [participants, setLocalParticipants] = useState(DEMO_PARTICIPANTS);
-  const [chatMessages, setChatMessages] = useState([
-    { id: 1, userId: '1', username: 'MC_Flow', message: 'Ready to drop some heat! 🔥', time: '2:30 PM' },
-    { id: 2, userId: '3', username: 'Judge_Dave', message: 'Let\'s see what you got', time: '2:31 PM' },
-    { id: 3, userId: '2', username: 'LyricQueen', message: 'GGs in advance 😤', time: '2:32 PM' },
-  ]);
+  const [participants, setLocalParticipants] = useState([]);
+  const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [copied, setCopied] = useState(false);
   const [cameraOn, setCameraOn] = useState(true);
   const [micOn, setMicOn] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
   const chatEndRef = useRef(null);
+  const chatMessagesRef = useRef(null);
 
-  const canStart = participants.filter(p => p.role === 'artist' && p.isReady).length >= 2 &&
-                   participants.filter(p => p.role === 'judge').length >= 2;
+  const canStart = participants.filter(p => p.role === 'artist' && p.isReady).length >= 2;
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!roomId) return;
+    
+    const unsubscribe = battleService.subscribeToWaitingRoom(roomId, (room) => {
+      if (room && room.players) {
+        const playersList = Object.values(room.players).map(p => ({
+          id: p.id,
+          name: p.username,
+          role: p.role || 'artist',
+          isReady: room.status === 'ready',
+          hasVideo: true,
+          hasAudio: true
+        }));
+        setLocalParticipants(playersList);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [roomId]);
+
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
   }, [chatMessages]);
 
   useEffect(() => {
@@ -238,7 +250,7 @@ function WaitingRoom() {
             <div className="chat-header">
               <h3>Waiting Room Chat</h3>
             </div>
-            <div className="chat-messages">
+            <div className="chat-messages" ref={chatMessagesRef}>
               {chatMessages.map(msg => (
                 <div 
                   key={msg.id} 

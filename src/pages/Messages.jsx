@@ -51,6 +51,7 @@ function Messages() {
   const [newRoomName, setNewRoomName] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const chatEndRef = useRef(null);
+  const chatMessagesRef = useRef(null);
 
   useEffect(() => {
     if (conversationId) {
@@ -64,7 +65,9 @@ function Messages() {
   }, [conversationId, conversations]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -232,7 +235,7 @@ function Messages() {
               </div>
             </header>
 
-            <div className="chat-view-messages">
+            <div className="chat-view-messages" ref={chatMessagesRef}>
               {messages.map(msg => (
                 <div 
                   key={msg.id} 

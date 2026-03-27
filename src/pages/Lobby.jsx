@@ -1,21 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore, useBattleStore } from '../stores/appStore';
-import { Swords, User, Users, Plus, Shuffle, Copy, Check } from 'lucide-react';
+import { battleService } from '../services/battleService';
+import { Swords, User, Users, Plus, Shuffle, Copy, Check, Search } from 'lucide-react';
 import './Lobby.css';
 
 function Lobby() {
   const navigate = useNavigate();
   const { user, userProfile } = useAuthStore();
-  const { setUserRole, setIsHost } = useBattleStore();
+  const { setUserRole, setIsHost, setCurrentBattle } = useBattleStore();
   const [roomCode, setRoomCode] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [activeRooms, setActiveRooms] = useState([
-    { id: '1', name: '🔥 Hot Bars Only', players: 4, status: 'waiting' },
-    { id: '2', name: 'Underground Battles', players: 6, status: 'active' },
-    { id: '3', name: 'New Artist Showcase', players: 3, status: 'waiting' },
-  ]);
+  const [activeRooms, setActiveRooms] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const unsubscribe = battleService.subscribeToWaitingRooms((rooms) => {
+      console.log('Active rooms from Firebase:', rooms);
+      setActiveRooms(rooms);
+    });
+    
+    return () => unsubscribe();
+  }, []);
 
   const generateRoomCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -26,23 +33,102 @@ function Lobby() {
     return code;
   };
 
-  const handleRoleSelect = (role) => {
-    setUserRole(role);
-    const roomId = generateRoomCode();
-    setIsHost(role === 'artist');
-    navigate(`/waiting/${roomId}`);
+  const handleQuickMatch = async () => {
+    if (!user) {
+      alert('Please sign in first');
+      return;
+    }
+    
+    try {
+      const username = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous';
+      
+      const roomId = await battleService.createWaitingRoom(
+        'Random Artists',
+        user.uid,
+        username
+      );
+      
+      setUserRole('artist');
+      setIsHost(true);
+      navigate(`/waiting/${roomId}`);
+    } catch (error) {
+      console.error('Match error:', error);
+      alert('Error creating room: ' + error.message);
+    }
   };
 
-  const handleJoinRoom = (roomId) => {
-    setUserRole('spectator');
-    navigate(`/waiting/${roomId}`);
+  const handleRoleSelect = async (role) => {
+    if (!user) {
+      alert('Please sign in first');
+      return;
+    }
+    
+    const username = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous';
+    
+    if (role === 'artist') {
+      const roomId = await battleService.createWaitingRoom(
+        `${username}'s Battle`,
+        user.uid,
+        username
+      );
+      setUserRole(role);
+      setIsHost(true);
+      navigate(`/waiting/${roomId}`);
+    } else if (role === 'judge') {
+      const roomId = await battleService.createWaitingRoom(
+        `${username}'s Room`,
+        user.uid,
+        username
+      );
+      setUserRole(role);
+      setIsHost(true);
+      navigate(`/waiting/${roomId}`);
+    } else if (role === 'spectator') {
+      const roomId = await battleService.createWaitingRoom(
+        `${username}'s Room`,
+        user.uid,
+        username
+      );
+      setUserRole(role);
+      setIsHost(true);
+      navigate(`/waiting/${roomId}`);
+    }
   };
 
-  const handleCreateRoom = () => {
-    const roomId = generateRoomCode();
-    setIsHost(true);
-    setUserRole('artist');
-    navigate(`/waiting/${roomId}`);
+  const handleJoinRoom = async (room) => {
+    if (!user) {
+      alert('Please sign in first');
+      return;
+    }
+    
+    try {
+      const username = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous';
+      await battleService.joinWaitingRoom(room.id, user.uid, username, 'spectator');
+      setUserRole('spectator');
+      setIsHost(false);
+      navigate(`/waiting/${room.id}`);
+    } catch (error) {
+      console.error('Join error:', error);
+      alert(error.message || 'Failed to join room');
+    }
+  };
+
+  const handleJoinByCode = async () => {
+    if (!roomCode.trim() || !user) {
+      alert('Please sign in first');
+      return;
+    }
+    
+    try {
+      const username = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous';
+      await battleService.joinWaitingRoom(roomCode.toUpperCase(), user.uid, username);
+      setUserRole('spectator');
+      setIsHost(false);
+      navigate(`/waiting/${roomCode.toUpperCase()}`);
+    } catch (error) {
+      console.error('Join error:', error);
+      alert(error.message || 'Room not found');
+    }
   };
 
   const handleCopyCode = (code) => {
@@ -50,6 +136,11 @@ function Lobby() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const filteredRooms = activeRooms.filter(room => 
+    room.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    room.id?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="lobby">
@@ -64,16 +155,16 @@ function Lobby() {
         <div className="role-grid">
           <button 
             className="role-card role-artist"
-            onClick={() => handleRoleSelect('artist')}
+            onClick={handleQuickMatch}
           >
             <div className="role-icon">
-              <Swords size={32} />
+              <Shuffle size={32} />
             </div>
             <div className="role-info">
-              <h3 className="role-title">Random Artist Battle</h3>
-              <p className="role-desc">Enter the arena as an artist and compete</p>
+              <h3 className="role-title">Random Artists</h3>
+              <p className="role-desc">Get matched with other artists instantly</p>
             </div>
-            <span className="role-badge">Compete</span>
+            <span className="role-badge">Play</span>
           </button>
 
           <button 
@@ -106,7 +197,7 @@ function Lobby() {
 
           <button 
             className="role-card role-create"
-            onClick={handleCreateRoom}
+            onClick={() => handleRoleSelect('artist')}
           >
             <div className="role-icon">
               <Plus size={32} />
@@ -132,7 +223,7 @@ function Lobby() {
             />
             <button 
               className="btn btn-primary"
-              onClick={() => roomCode.length >= 4 && handleJoinRoom(roomCode)}
+              onClick={() => roomCode.length >= 4 && handleJoinByCode()}
               disabled={roomCode.length < 4}
             >
               Join Room
@@ -141,31 +232,58 @@ function Lobby() {
         </div>
 
         <section className="active-rooms">
-          <h2 className="section-title">Active Battles</h2>
+          <div className="section-header">
+            <h2 className="section-title">Active Battles</h2>
+            <div className="search-box">
+              <Search size={16} />
+              <input
+                type="text"
+                placeholder="Search rooms..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
           <div className="rooms-list">
-            {activeRooms.map(room => (
-              <button 
-                key={room.id} 
-                className="room-card"
-                onClick={() => handleJoinRoom(room.id)}
-              >
-                <div className="room-info">
-                  <h3 className="room-name">{room.name}</h3>
-                  <div className="room-meta">
-                    <span className="room-players">
-                      <Users size={14} />
-                      {room.players} online
-                    </span>
-                    <span className={`room-status ${room.status}`}>
-                      {room.status === 'waiting' ? 'Waiting' : 'Live'}
-                    </span>
-                  </div>
-                </div>
-                <div className="room-action">
-                  <Shuffle size={18} />
-                </div>
-              </button>
-            ))}
+            {filteredRooms.length === 0 ? (
+              <p className="no-rooms">No active battles. Create one or join with a code!</p>
+            ) : (
+              filteredRooms.map(room => {
+                const playerCount = room.players ? Object.keys(room.players).length : 0;
+                return (
+                  <button 
+                    key={room.id} 
+                    className="room-card"
+                    onClick={() => handleJoinRoom(room)}
+                  >
+                    <div className="room-info">
+                      <h3 className="room-name">{room.name}</h3>
+                      <div className="room-meta">
+                        <span className="room-players">
+                          <Users size={14} />
+                          {playerCount} / {room.maxPlayers || 2} players
+                        </span>
+                        <span className={`room-status ${room.status}`}>
+                          {room.status === 'waiting' ? 'Waiting' : 'Ready'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="room-code">
+                      <span>{room.id}</span>
+                      <button 
+                        className="copy-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCopyCode(room.id);
+                        }}
+                      >
+                        {copied ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
         </section>
       </div>
