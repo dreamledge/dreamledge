@@ -28,12 +28,6 @@ function Home() {
     setError('');
     setLoadingState(true);
 
-    if (!formData.username.trim()) {
-      setError('Username is required');
-      setLoadingState(false);
-      return;
-    }
-
     if (!formData.email.trim()) {
       setError('Email is required');
       setLoadingState(false);
@@ -53,31 +47,51 @@ function Home() {
     }
 
     try {
-      const userId = `user_${Date.now()}`;
-      const newUser = {
-        uid: userId,
-        email: formData.email,
-        displayName: formData.username,
-        photoURL: null,
-      };
-      
-      const userProfile = {
-        uid: userId,
-        email: formData.email,
-        displayName: formData.username,
-        bio: '',
-        points: 1000,
-        wins: 0,
-        createdAt: Date.now(),
-      };
-      
-      setUser(newUser);
-      setUserProfile(userProfile);
-      setLoadingState(false);
-      navigate('/lobby');
+      if (showSignIn) {
+        // Sign in - look up existing user by email
+        const existingProfile = await userService.getUserByEmail(formData.email);
+        
+        if (!existingProfile) {
+          setError('No account found with this email. Create an account first.');
+          setLoadingState(false);
+          return;
+        }
+
+        setUser({
+          uid: existingProfile.uid,
+          email: existingProfile.email,
+          displayName: existingProfile.displayName,
+          photoURL: existingProfile.photoURL,
+        });
+        setUserProfile(existingProfile);
+        setLoadingState(false);
+        navigate('/lobby');
+      } else {
+        // Sign up - create new user
+        if (!formData.username.trim()) {
+          setError('Username is required');
+          setLoadingState(false);
+          return;
+        }
+
+        const userId = `user_${Date.now()}`;
+        const newUser = {
+          uid: userId,
+          email: formData.email,
+          displayName: formData.username,
+          photoURL: null,
+        };
+        
+        const userProfile = await userService.createOrUpdateUser(newUser);
+        
+        setUser(newUser);
+        setUserProfile(userProfile);
+        setLoadingState(false);
+        navigate('/lobby');
+      }
     } catch (err) {
       console.error('Auth error:', err);
-      setError('Failed to create account. Please try again.');
+      setError('Failed to process request. Please try again.');
       setLoadingState(false);
     }
   };
