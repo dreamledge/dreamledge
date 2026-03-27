@@ -39,6 +39,13 @@ function ProtectedRoute({ children }) {
 }
 
 function App() {
+  const { isLoading, setLoading } = useAuthStore();
+  
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 500);
+    return () => clearTimeout(timer);
+  }, [setLoading]);
+  
   return (
     <BrowserRouter>
       <div className="app">

@@ -18,10 +18,10 @@ function Home() {
   });
 
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && user && !isLoading) {
       navigate('/lobby', { replace: true });
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, isLoading, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
