@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
-import { signInWithGoogle } from '../services/firebase';
 import { userService } from '../services/userService';
-import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Chrome, Trophy } from 'lucide-react';
+import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Trophy } from 'lucide-react';
 import './Home.css';
 
 function Home() {
   const navigate = useNavigate();
   const { user, setUser, setUserProfile, setLoading, isAuthenticated } = useAuthStore();
-  const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoadingState] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
@@ -24,59 +22,60 @@ function Home() {
     }
   }, [isAuthenticated, user, navigate]);
 
-  const handleGoogleSignIn = async () => {
-    setError('');
-    setLoadingState(true);
-    
-    try {
-      const result = await signInWithGoogle();
-      
-      const firebaseUser = {
-        uid: result.user.uid,
-        email: result.user.email,
-        displayName: result.user.displayName,
-        photoURL: result.user.photoURL,
-      };
-      
-      const userProfile = await userService.createOrUpdateUser(firebaseUser);
-      
-      setUser(firebaseUser);
-      setUserProfile(userProfile);
-      setLoadingState(false);
-    } catch (err) {
-      console.error('Sign-in error:', err);
-      alert('Error: ' + (err.message || err.code));
-      setError('Failed to sign in. Please try again.');
-      setLoadingState(false);
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoadingState(true);
 
+    if (!formData.username.trim()) {
+      setError('Username is required');
+      setLoadingState(false);
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      setError('Email is required');
+      setLoadingState(false);
+      return;
+    }
+
+    if (!formData.password.trim()) {
+      setError('Password is required');
+      setLoadingState(false);
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      setLoadingState(false);
+      return;
+    }
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const user = {
-        uid: `user_${Date.now()}`,
+      const userId = `user_${Date.now()}`;
+      const newUser = {
+        uid: userId,
         email: formData.email,
-        displayName: formData.username || formData.email.split('@')[0],
+        displayName: formData.username,
+        photoURL: null,
       };
       
-      setUser(user);
-      setLoading(false);
-      navigate('/profile');
+      const userProfile = await userService.createOrUpdateUser(newUser);
+      
+      setUser(newUser);
+      setUserProfile(userProfile);
+      setLoadingState(false);
+      navigate('/lobby');
     } catch (err) {
-      setError('Authentication failed. Please try again.');
-    } finally {
+      console.error('Auth error:', err);
+      setError('Failed to create account. Please try again.');
       setLoadingState(false);
     }
   };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError('');
   };
 
   return (
@@ -182,47 +181,29 @@ function Home() {
           <div className="auth-card">
             <div className="auth-header">
               <h2 className="auth-title">
-                {isLogin ? 'Welcome Back' : 'Join Dreamledge'}
+                Join Dreamledge
               </h2>
               <p className="auth-subtitle">
-                {isLogin 
-                  ? 'Sign in to continue to the arena' 
-                  : 'Create an account to start battling'}
+                Create an account to start battling
               </p>
             </div>
 
-            <button 
-              type="button" 
-              className="btn btn-google"
-              onClick={handleGoogleSignIn}
-              disabled={loading}
-            >
-              <Chrome size={20} />
-              Continue with Google
-            </button>
-
-            <div className="auth-divider">
-              <span>or</span>
-            </div>
-
             <form onSubmit={handleSubmit} className="auth-form">
-              {!isLogin && (
-                <div className="input-group">
-                  <label className="input-label">
-                    <User size={16} />
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    className="input"
-                    placeholder="Choose a username"
-                    required={!isLogin}
-                  />
-                </div>
-              )}
+              <div className="input-group">
+                <label className="input-label">
+                  <User size={16} />
+                  Username
+                </label>
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  className="input"
+                  placeholder="Enter your username"
+                  required
+                />
+              </div>
 
               <div className="input-group">
                 <label className="input-label">
@@ -268,22 +249,10 @@ function Home() {
                     <span></span><span></span><span></span>
                   </span>
                 ) : (
-                  isLogin ? 'Sign In' : 'Create Account'
+                  'Create Account'
                 )}
               </button>
             </form>
-
-            <div className="auth-footer">
-              <p>
-                {isLogin ? "Don't have an account? " : "Already have an account? "}
-                <button 
-                  className="auth-switch"
-                  onClick={() => setIsLogin(!isLogin)}
-                >
-                  {isLogin ? 'Sign Up' : 'Sign In'}
-                </button>
-              </p>
-            </div>
           </div>
         </section>
       </main>
