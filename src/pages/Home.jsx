@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
-import { signInWithGoogle } from '../services/firebase';
+import { signInWithGoogle, getRedirectResult } from '../services/firebase';
 import { userService } from '../services/userService';
 import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Chrome, Trophy } from 'lucide-react';
 import './Home.css';
@@ -18,6 +18,36 @@ function Home() {
     username: '',
   });
 
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult();
+        if (result && result.user) {
+          const firebaseUser = {
+            uid: result.user.uid,
+            email: result.user.email,
+            displayName: result.user.displayName,
+            photoURL: result.user.photoURL,
+          };
+          
+          const userProfile = await userService.createOrUpdateUser(firebaseUser);
+          setUser(firebaseUser);
+          setUserProfile(userProfile);
+          setLoading(false);
+          navigate('/lobby');
+        }
+      } catch (err) {
+        console.error('Redirect result error:', err);
+        if (err.message !== 'Redirecting...') {
+          setError('Sign-in failed. Please try again.');
+          setLoadingState(false);
+        }
+      }
+    };
+    
+    handleRedirectResult();
+  }, [navigate, setUser, setUserProfile, setLoading]);
+
   if (isAuthenticated) {
     navigate('/lobby');
     return null;
@@ -28,29 +58,13 @@ function Home() {
     setLoadingState(true);
     
     try {
-      alert('Starting Google sign-in...');
-      const result = await signInWithGoogle();
-      alert('Sign-in succeeded! UID: ' + result.user.uid);
-      
-      const firebaseUser = {
-        uid: result.user.uid,
-        email: result.user.email,
-        displayName: result.user.displayName,
-        photoURL: result.user.photoURL,
-      };
-      
-      alert('Saving user to database...');
-      const userProfile = await userService.createOrUpdateUser(firebaseUser);
-      alert('User saved! Profile: ' + JSON.stringify(userProfile));
-      
-      setUser(firebaseUser);
-      setUserProfile(userProfile);
-      setLoading(false);
-      navigate('/lobby');
+      await signInWithGoogle();
     } catch (err) {
+      if (err.message === 'Redirecting...') {
+        return;
+      }
       let errorMsg = err.message || err.code || JSON.stringify(err) || 'Unknown error';
       alert('FAILED: ' + errorMsg);
-      console.log('Full error:', err);
       setError('Failed to sign in. Error: ' + errorMsg);
       setLoadingState(false);
     }
