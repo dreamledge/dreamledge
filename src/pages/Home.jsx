@@ -29,6 +29,7 @@ function Home() {
     
     try {
       const result = await signInWithGoogle();
+      alert('Sign-in successful! User: ' + result.user.email);
       
       const firebaseUser = {
         uid: result.user.uid,
@@ -37,11 +38,15 @@ function Home() {
         photoURL: result.user.photoURL,
       };
       
+      alert('Creating profile for: ' + firebaseUser.displayName);
       const userProfile = await userService.createOrUpdateUser(firebaseUser);
+      alert('Profile saved! Now setting state and navigating...');
       
       setUser(firebaseUser);
       setUserProfile(userProfile);
       setLoadingState(false);
+      
+      alert('About to navigate to /lobby');
       navigate('/lobby');
     } catch (err) {
       console.error('Sign-in error:', err);
