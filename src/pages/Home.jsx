@@ -61,7 +61,9 @@ function Home() {
         photoURL: null,
       };
       
+      alert('Creating account for: ' + formData.username);
       const userProfile = await userService.createOrUpdateUser(newUser);
+      alert('Account created! Profile: ' + JSON.stringify(userProfile));
       
       setUser(newUser);
       setUserProfile(userProfile);
@@ -69,6 +71,7 @@ function Home() {
       navigate('/lobby');
     } catch (err) {
       console.error('Auth error:', err);
+      alert('Error: ' + (err.message || err.code || JSON.stringify(err)));
       setError('Failed to create account. Please try again.');
       setLoadingState(false);
     }
