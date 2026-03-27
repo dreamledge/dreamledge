@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
-import { signInWithGoogle, getRedirectResult } from '../services/firebase';
+import { signInWithGoogle } from '../services/firebase';
 import { userService } from '../services/userService';
 import { Sparkles, Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Chrome, Trophy } from 'lucide-react';
 import './Home.css';
@@ -18,36 +18,6 @@ function Home() {
     username: '',
   });
 
-  useEffect(() => {
-    const handleRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult();
-        if (result && result.user) {
-          const firebaseUser = {
-            uid: result.user.uid,
-            email: result.user.email,
-            displayName: result.user.displayName,
-            photoURL: result.user.photoURL,
-          };
-          
-          const userProfile = await userService.createOrUpdateUser(firebaseUser);
-          setUser(firebaseUser);
-          setUserProfile(userProfile);
-          setLoading(false);
-          navigate('/lobby');
-        }
-      } catch (err) {
-        console.error('Redirect result error:', err);
-        if (err.message !== 'Redirecting...') {
-          setError('Sign-in failed. Please try again.');
-          setLoadingState(false);
-        }
-      }
-    };
-    
-    handleRedirectResult();
-  }, [navigate, setUser, setUserProfile, setLoading]);
-
   if (isAuthenticated) {
     navigate('/lobby');
     return null;
@@ -58,14 +28,25 @@ function Home() {
     setLoadingState(true);
     
     try {
-      await signInWithGoogle();
+      const result = await signInWithGoogle();
+      
+      const firebaseUser = {
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+      };
+      
+      const userProfile = await userService.createOrUpdateUser(firebaseUser);
+      
+      setUser(firebaseUser);
+      setUserProfile(userProfile);
+      setLoadingState(false);
+      navigate('/lobby');
     } catch (err) {
-      if (err.message === 'Redirecting...') {
-        return;
-      }
-      let errorMsg = err.message || err.code || JSON.stringify(err) || 'Unknown error';
-      alert('FAILED: ' + errorMsg);
-      setError('Failed to sign in. Error: ' + errorMsg);
+      console.error('Sign-in error:', err);
+      alert('Error: ' + (err.message || err.code));
+      setError('Failed to sign in. Please try again.');
       setLoadingState(false);
     }
   };
