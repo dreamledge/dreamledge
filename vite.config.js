@@ -1,13 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const isVercel = process.env.VERCEL === '1';
+const isProduction = process.env.NODE_ENV === 'production';
 
 export default defineConfig({
-  base: isVercel ? '/' : '/dreamledge/',
+  base: isProduction ? '/' : '/dreamledge/',
   plugins: [react()],
   build: {
-    outDir: isVercel ? 'dist' : 'docs'
+    outDir: 'dist'
   },
   server: {
     host: true,
