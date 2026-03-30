@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
 import { registerWithEmail, signInWithEmail, signInWithGoogle } from '../services/firebase';
@@ -10,6 +10,7 @@ import './Home.css';
 function Home() {
   const navigate = useNavigate();
   const { user, setUser, setUserProfile, isAuthenticated } = useAuthStore();
+  const landingVideoRef = useRef(null);
   const [loading, setLoadingState] = useState(false);
   const [showSignIn, setShowSignIn] = useState(false);
   const [error, setError] = useState('');
@@ -111,6 +112,28 @@ function Home() {
     }
   };
 
+  useEffect(() => {
+    const video = landingVideoRef.current;
+    if (!video) return undefined;
+
+    const tryPlay = () => {
+      video.muted = true;
+      const playPromise = video.play();
+      if (playPromise?.catch) {
+        playPromise.catch(() => {});
+      }
+    };
+
+    tryPlay();
+    video.addEventListener('loadedmetadata', tryPlay);
+    video.addEventListener('canplay', tryPlay);
+
+    return () => {
+      video.removeEventListener('loadedmetadata', tryPlay);
+      video.removeEventListener('canplay', tryPlay);
+    };
+  }, []);
+
   return (
     <div className="home">
       <div className="home-background">
@@ -175,6 +198,7 @@ function Home() {
 
               <div className="battle-preview-video-wrap">
                 <video
+                  ref={landingVideoRef}
                   className="battle-preview-video"
                   src={landingPageMovie}
                   autoPlay
@@ -182,6 +206,7 @@ function Home() {
                   loop
                   playsInline
                   preload="auto"
+                  disablePictureInPicture
                 />
               </div>
             </div>
