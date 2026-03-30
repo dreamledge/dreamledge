@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:token": "node server/livekit-token-server.js",
     "build": "vite build",
+    "build:pages": "vite build --outDir docs --emptyOutDir",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
