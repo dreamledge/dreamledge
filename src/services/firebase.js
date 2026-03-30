@@ -44,6 +44,14 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
 export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
+export const updateAuthUserProfile = async (updates) => {
+  if (!auth.currentUser) {
+    return null;
+  }
+
+  await updateProfile(auth.currentUser, updates);
+  return auth.currentUser;
+};
 export const registerWithEmail = async (email, password, displayName) => {
   const result = await createUserWithEmailAndPassword(auth, email, password);
   if (displayName) {

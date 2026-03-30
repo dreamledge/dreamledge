@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
 import { userService } from '../services/userService';
+import { updateAuthUserProfile } from '../services/firebase';
 import { User, Mail, Calendar, Edit2, Camera, Save, X, Check, AlertCircle } from 'lucide-react';
 import './Profile.css';
 
 function Profile() {
   const navigate = useNavigate();
-  const { user, userProfile, setUserProfile } = useAuthStore();
+  const { user, userProfile, setUser, setUserProfile } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -88,19 +89,25 @@ function Profile() {
     setError('');
 
     try {
-      await userService.updateUserProfile(user.uid, {
+      await updateAuthUserProfile({
         displayName: formData.username,
+        photoURL: formData.avatarUrl || null,
+      });
+
+      const updatedProfile = await userService.updateUserProfile(user.uid, {
+        displayName: formData.username,
+        username: formData.username,
         bio: formData.bio,
         photoURL: formData.avatarUrl,
       });
 
-      const updatedProfile = {
-        ...userProfile,
+      const updatedAuthUser = {
+        ...user,
         displayName: formData.username,
-        bio: formData.bio,
         photoURL: formData.avatarUrl,
       };
-      
+
+      setUser(updatedAuthUser);
       setUserProfile(updatedProfile);
       setIsEditing(false);
       setShowSuccess(true);

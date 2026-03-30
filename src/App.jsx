@@ -34,29 +34,56 @@ function ScrollToTop() {
 }
 
 function App() {
-  const { setUser, setUserProfile, logout } = useAuthStore();
+  const { setUser, setUserProfile, setLoading, logout } = useAuthStore();
 
   useEffect(() => {
+    let unsubscribeProfile = null;
+
     const unsubscribe = observeAuthState(async (firebaseUser) => {
       if (!firebaseUser) {
+        if (unsubscribeProfile) {
+          unsubscribeProfile();
+          unsubscribeProfile = null;
+        }
         logout();
+        setLoading(false);
         return;
       }
 
-      const normalizedUser = {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Anonymous',
-        photoURL: firebaseUser.photoURL || null,
-      };
+      setLoading(true);
 
-      setUser(normalizedUser);
-      const profile = await userService.createOrUpdateUser(normalizedUser);
-      setUserProfile(profile);
+      try {
+        const normalizedUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Anonymous',
+          photoURL: firebaseUser.photoURL || null,
+        };
+
+        setUser(normalizedUser);
+        await userService.createOrUpdateUser(normalizedUser);
+
+        if (unsubscribeProfile) {
+          unsubscribeProfile();
+        }
+
+        unsubscribeProfile = userService.subscribeToUserProfile(normalizedUser.uid, (profile) => {
+          setUserProfile(profile);
+          setLoading(false);
+        });
+      } catch (error) {
+        console.error('Failed to bootstrap user profile:', error);
+        setLoading(false);
+      }
     });
 
-    return () => unsubscribe();
-  }, [logout, setUser, setUserProfile]);
+    return () => {
+      unsubscribe();
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
+    };
+  }, [logout, setLoading, setUser, setUserProfile]);
 
   return (
     <BrowserRouter>

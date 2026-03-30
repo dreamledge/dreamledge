@@ -178,7 +178,7 @@ function Messages() {
     setNewMessage('');
 
     const chatType = selectedConversation.type === 'room' ? 'rooms' : 'dms';
-    const username = userProfile?.username || user?.displayName || 'Anonymous';
+    const username = userProfile?.displayName || user?.displayName || 'Anonymous';
     
     const tempMessage = {
       id: Date.now(),
@@ -208,7 +208,7 @@ function Messages() {
     if (!selectedConversation) return;
 
     const chatType = selectedConversation.type === 'room' ? 'rooms' : 'dms';
-    const username = userProfile?.username || user?.displayName || 'Anonymous';
+    const username = userProfile?.displayName || user?.displayName || 'Anonymous';
     
     const tempMessage = {
       id: Date.now(),
@@ -242,7 +242,7 @@ function Messages() {
   const handleCreateRoom = async () => {
     if (!newRoomName.trim()) return;
     
-    const username = userProfile?.username || user?.displayName || 'Anonymous';
+    const username = userProfile?.displayName || user?.displayName || 'Anonymous';
     
     try {
       const roomId = await chatService.createRoom(newRoomName, user?.uid || 'me');

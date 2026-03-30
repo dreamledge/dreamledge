@@ -1,38 +1,94 @@
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './firebase';
 
+const USER_PROFILE_COLLECTION = 'users';
+const USER_DIRECTORY_COLLECTION = import.meta.env.VITE_FIREBASE_USER_DIRECTORY_COLLECTION || 'publicUsers';
+
+function profileDoc(uid) {
+  return doc(db, USER_PROFILE_COLLECTION, uid);
+}
+
+function directoryDoc(uid) {
+  return doc(db, USER_DIRECTORY_COLLECTION, uid);
+}
+
+function buildPublicProfile(profile = {}) {
+  return {
+    uid: profile.uid,
+    displayName: profile.displayName || 'Anonymous',
+    username: profile.username || profile.displayName || 'Anonymous',
+    photoURL: profile.photoURL || null,
+    bio: profile.bio || '',
+    updatedAt: serverTimestamp(),
+  };
+}
+
+async function syncDirectoryProfile(profile) {
+  if (!profile?.uid) {
+    return;
+  }
+
+  const publicProfile = buildPublicProfile(profile);
+  await setDoc(directoryDoc(profile.uid), publicProfile, { merge: true });
+}
+
 export const userService = {
   async createOrUpdateUser(user) {
-    const userRef = doc(db, 'users', user.uid);
+    const userRef = profileDoc(user.uid);
     const existingUser = await getDoc(userRef);
 
-    const userData = {
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName || 'Anonymous',
-      photoURL: user.photoURL || null,
-      bio: '',
+    if (!existingUser.exists()) {
+      const userData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || 'Anonymous',
+        username: user.displayName || 'Anonymous',
+        photoURL: user.photoURL || null,
+        bio: '',
+        points: 1000,
+        wins: 0,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(userRef, userData);
+      await syncDirectoryProfile(userData);
+      return { ...userData, createdAt: new Date(), updatedAt: new Date() };
+    }
+
+    const existingData = existingUser.data();
+    const updates = {
+      email: user.email || existingData.email || '',
       updatedAt: serverTimestamp(),
     };
 
-    if (!existingUser.exists()) {
-      userData.createdAt = serverTimestamp();
-      userData.points = 1000;
-      userData.wins = 0;
-      await setDoc(userRef, userData);
-    } else {
-      await updateDoc(userRef, {
-        ...userData,
-        updatedAt: serverTimestamp(),
-      });
+    if (!existingData.displayName && user.displayName) {
+      updates.displayName = user.displayName;
     }
 
-    return userData;
+    if (!existingData.username && (existingData.displayName || user.displayName)) {
+      updates.username = existingData.displayName || user.displayName;
+    }
+
+    if (!existingData.photoURL && user.photoURL) {
+      updates.photoURL = user.photoURL;
+    }
+
+    await setDoc(userRef, updates, { merge: true });
+
+    const mergedProfile = {
+      id: existingUser.id,
+      ...existingData,
+      ...Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined)),
+    };
+
+    await syncDirectoryProfile(mergedProfile);
+    return mergedProfile;
   },
 
   async getUserProfile(uid) {
-    const userRef = doc(db, 'users', uid);
+    const userRef = profileDoc(uid);
     const userSnap = await getDoc(userRef);
     
     if (userSnap.exists()) {
@@ -41,8 +97,14 @@ export const userService = {
     return null;
   },
 
+  subscribeToUserProfile(uid, callback) {
+    return onSnapshot(profileDoc(uid), (userSnap) => {
+      callback(userSnap.exists() ? { id: userSnap.id, ...userSnap.data() } : null);
+    });
+  },
+
   async getUserByEmail(email) {
-    const usersRef = collection(db, 'users');
+    const usersRef = collection(db, USER_PROFILE_COLLECTION);
     const q = query(usersRef, where('email', '==', email));
     const querySnapshot = await getDocs(q);
     
@@ -57,7 +119,7 @@ export const userService = {
     const normalizedSearch = searchTerm.trim().toLowerCase();
     if (!normalizedSearch) return [];
 
-    const usersRef = collection(db, 'users');
+    const usersRef = collection(db, USER_DIRECTORY_COLLECTION);
     const snapshot = await getDocs(usersRef);
 
     return snapshot.docs
@@ -67,7 +129,6 @@ export const userService = {
         const searchableValues = [
           profile.displayName,
           profile.username,
-          profile.email,
           profile.uid,
         ]
           .filter(Boolean)
@@ -79,21 +140,31 @@ export const userService = {
   },
 
   async updateUserProfile(uid, updates) {
-    const userRef = doc(db, 'users', uid);
-    await updateDoc(userRef, {
+    const userRef = profileDoc(uid);
+    const nextProfile = {
+      uid,
       ...updates,
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    if (updates.displayName && !updates.username) {
+      nextProfile.username = updates.displayName;
+    }
+
+    await setDoc(userRef, nextProfile, { merge: true });
+    await syncDirectoryProfile(nextProfile);
+
+    const updatedProfile = await this.getUserProfile(uid);
+    return updatedProfile;
   },
 
   async uploadProfilePicture(uid, file) {
     const storageRef = ref(storage, `profile_pictures/${uid}`);
     await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(storageRef);
-    
-    await updateDoc(doc(db, 'users', uid), {
+
+    await this.updateUserProfile(uid, {
       photoURL: downloadURL,
-      updatedAt: serverTimestamp(),
     });
     
     return downloadURL;
