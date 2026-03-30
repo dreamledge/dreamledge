@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/appStore';
 import { registerWithEmail, signInWithEmail, signInWithGoogle } from '../services/firebase';
 import { userService } from '../services/userService';
 import { Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Trophy } from 'lucide-react';
+import landingPageMovie from '../../image/landingpagemovie.mp4';
 import './Home.css';
 
 function Home() {
@@ -172,49 +173,16 @@ function Home() {
                 </div>
               </div>
 
-              <div className="battle-preview">
-                <div className="preview-card artist-1">
-                  <div className="preview-spotlight"></div>
-                  <div className="preview-avatar">
-                    <Mic size={32} />
-                  </div>
-                  <div className="preview-bars">
-                    <span></span><span></span><span></span><span></span>
-                  </div>
-                  <span className="preview-name">Nova Flame</span>
-                  <span className="preview-label">Round 3 Attack</span>
-                </div>
-
-                <div className="preview-vs-wrap">
-                  <div className="preview-vs">VS</div>
-                  <span className="preview-round">Crowd Vote Open</span>
-                </div>
-
-                <div className="preview-card artist-2">
-                  <div className="preview-spotlight"></div>
-                  <div className="preview-avatar">
-                    <Mic size={32} />
-                  </div>
-                  <div className="preview-bars">
-                    <span></span><span></span><span></span><span></span>
-                  </div>
-                  <span className="preview-name">Rico Verse</span>
-                  <span className="preview-label">Counter Energy</span>
-                </div>
-              </div>
-
-              <div className="media-card-footer">
-                <div className="media-stat">
-                  <span className="media-stat-value">89%</span>
-                  <span className="media-stat-label">retention</span>
-                </div>
-                <div className="media-waveform">
-                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                </div>
-                <div className="media-stat align-right">
-                  <span className="media-stat-value">2:14</span>
-                  <span className="media-stat-label">live set</span>
-                </div>
+              <div className="battle-preview-video-wrap">
+                <video
+                  className="battle-preview-video"
+                  src={landingPageMovie}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="auto"
+                />
               </div>
             </div>
           </div>
