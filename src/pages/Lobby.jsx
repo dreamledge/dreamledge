@@ -266,19 +266,26 @@ function Lobby() {
                     className="room-card"
                     onClick={() => handleJoinRoom(room)}
                   >
+                    <span className={`room-card-accent ${room.status}`}></span>
                     <div className="room-info">
-                      <h3 className="room-name">{room.name}</h3>
+                      <div className="room-name-row">
+                        <h3 className="room-name">{room.name}</h3>
+                        <span className={`room-status ${room.status}`}>
+                          {room.status === 'waiting' ? 'Waiting' : 'Ready'}
+                        </span>
+                      </div>
                       <div className="room-meta">
                         <span className="room-players">
                           <Users size={14} />
                           {playerCount} / {room.maxPlayers || 2} players
                         </span>
-                        <span className={`room-status ${room.status}`}>
-                          {room.status === 'waiting' ? 'Waiting' : 'Ready'}
+                        <span className="room-meta-pill">
+                          Spectate live
                         </span>
                       </div>
                     </div>
                     <div className="room-code">
+                      <small>Room code</small>
                       <span>{room.id}</span>
                       <button 
                         className="copy-btn"

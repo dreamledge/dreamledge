@@ -2,6 +2,8 @@
   min-height: 100vh;
   position: relative;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .home-background {
@@ -126,6 +128,8 @@
   max-width: 1240px;
   margin: 0 auto;
   padding: 1.5rem 1rem 3rem;
+  width: 100%;
+  flex: 1;
 }
 
 .hero {
@@ -708,7 +712,7 @@
   position: relative;
   z-index: 10;
   text-align: center;
-  padding: 1rem 1rem 6rem;
+  padding: 0.5rem 1rem 1.5rem;
   color: rgba(255,255,255,0.38);
   font-size: 0.82rem;
   letter-spacing: 0.08em;

@@ -417,6 +417,7 @@
 }
 
 .chat-section {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 420px;
