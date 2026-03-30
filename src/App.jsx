@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './stores/appStore';
+import { observeAuthState } from './services/firebase';
+import { userService } from './services/userService';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Lobby from './pages/Lobby';
@@ -32,6 +34,30 @@ function ScrollToTop() {
 }
 
 function App() {
+  const { setUser, setUserProfile, logout } = useAuthStore();
+
+  useEffect(() => {
+    const unsubscribe = observeAuthState(async (firebaseUser) => {
+      if (!firebaseUser) {
+        logout();
+        return;
+      }
+
+      const normalizedUser = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Anonymous',
+        photoURL: firebaseUser.photoURL || null,
+      };
+
+      setUser(normalizedUser);
+      const profile = await userService.createOrUpdateUser(normalizedUser);
+      setUserProfile(profile);
+    });
+
+    return () => unsubscribe();
+  }, [logout, setUser, setUserProfile]);
+
   return (
     <BrowserRouter>
       <ScrollToTop />

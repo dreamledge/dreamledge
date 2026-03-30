@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore, useUIStore } from '../stores/appStore';
 import { chatService } from '../services/chatService';
+import { userService } from '../services/userService';
 import { Search, Plus, Send, Users, MessageCircle, Hash, ArrowLeft, X, Check } from 'lucide-react';
 import GifPicker from '../components/GifPicker';
 import './Messages.css';
@@ -50,6 +51,8 @@ function Messages() {
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [userResults, setUserResults] = useState([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
   const chatEndRef = useRef(null);
   const chatMessagesRef = useRef(null);
 
@@ -95,6 +98,70 @@ function Messages() {
   const filteredRooms = rooms.filter(r => 
     r.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  useEffect(() => {
+    if (activeTab !== 'dms') {
+      setUserResults([]);
+      setSearchingUsers(false);
+      return undefined;
+    }
+
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery.length < 2) {
+      setUserResults([]);
+      setSearchingUsers(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setSearchingUsers(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const results = await userService.searchUsers(trimmedQuery, user?.uid);
+        if (!cancelled) {
+          setUserResults(results);
+        }
+      } catch (error) {
+        console.error('Failed to search users:', error);
+        if (!cancelled) {
+          setUserResults([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setSearchingUsers(false);
+        }
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [activeTab, searchQuery, user?.uid]);
+
+  const openDirectMessage = (profile) => {
+    const dmId = [user?.uid || 'me', profile.uid].sort().join('__');
+    const existingConversation = conversations.find((conversation) => conversation.id === dmId);
+
+    const directConversation = existingConversation || {
+      id: dmId,
+      type: 'dm',
+      uid: profile.uid,
+      name: profile.displayName || profile.username || profile.email || profile.uid,
+      avatar: profile.photoURL || '#e63946',
+      photoURL: profile.photoURL || null,
+      lastMessage: 'Start the conversation',
+      time: 'Now',
+      unread: 0,
+    };
+
+    if (!existingConversation) {
+      setConversations((prev) => [directConversation, ...prev.filter((conversation) => conversation.id !== dmId)]);
+    }
+
+    handleSelectConversation(directConversation);
+  };
 
   const handleSelectConversation = (conv) => {
     setSelectedConversation(conv);
@@ -217,12 +284,16 @@ function Messages() {
                 <ArrowLeft size={20} />
               </button>
               <div className="chat-view-info">
-                <span 
-                  className="chat-view-avatar"
-                  style={{ background: selectedConversation.avatar }}
-                >
-                  {selectedConversation.type === 'room' ? <Hash size={18} /> : selectedConversation.name.charAt(0)}
-                </span>
+                {selectedConversation.photoURL ? (
+                  <img src={selectedConversation.photoURL} alt={selectedConversation.name} className="chat-view-avatar user-result-avatar" />
+                ) : (
+                  <span 
+                    className="chat-view-avatar"
+                    style={{ background: selectedConversation.avatar }}
+                  >
+                    {selectedConversation.type === 'room' ? <Hash size={18} /> : selectedConversation.name.charAt(0)}
+                  </span>
+                )}
                 <div className="chat-view-details">
                   <h2 className="chat-view-name">{selectedConversation.name}</h2>
                   {selectedConversation.type === 'room' && (
@@ -309,7 +380,7 @@ function Messages() {
               <input
                 type="text"
                 className="input search-input"
-                placeholder="Search conversations..."
+                placeholder={activeTab === 'dms' ? 'Search users by name or id...' : 'Search conversations...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -317,18 +388,56 @@ function Messages() {
 
             {activeTab === 'dms' && (
               <div className="conversations-list">
+                {searchQuery.trim().length >= 2 && (
+                  <div className="user-search-panel">
+                    <div className="user-search-header">
+                      <span>Users</span>
+                      <small>{searchingUsers ? 'Searching...' : `${userResults.length} found`}</small>
+                    </div>
+                    {userResults.map((profile) => (
+                      <button
+                        key={profile.uid}
+                        className="conversation-item user-result-item"
+                        onClick={() => openDirectMessage(profile)}
+                      >
+                        {profile.photoURL ? (
+                          <img src={profile.photoURL} alt={profile.displayName || profile.uid} className="conv-avatar user-result-avatar" />
+                        ) : (
+                          <span className="conv-avatar user-result-avatar">
+                            {(profile.displayName || profile.username || profile.uid || '?').charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                        <div className="conv-info">
+                          <div className="conv-header">
+                            <span className="conv-name">{profile.displayName || profile.username || 'Unknown user'}</span>
+                            <span className="user-result-badge">Active user</span>
+                          </div>
+                          <p className="conv-preview">ID: {profile.uid}</p>
+                        </div>
+                      </button>
+                    ))}
+                    {!searchingUsers && !userResults.length && (
+                      <div className="search-empty-state">No users match that name or id yet.</div>
+                    )}
+                  </div>
+                )}
+
                 {filteredConversations.filter(c => c.type === 'dm').map(conv => (
                   <button
                     key={conv.id}
                     className="conversation-item"
                     onClick={() => handleSelectConversation(conv)}
                   >
-                    <span 
-                      className="conv-avatar"
-                      style={{ background: conv.avatar }}
-                    >
-                      {conv.name.charAt(0)}
-                    </span>
+                    {conv.photoURL ? (
+                      <img src={conv.photoURL} alt={conv.name} className="conv-avatar user-result-avatar" />
+                    ) : (
+                      <span 
+                        className="conv-avatar"
+                        style={{ background: conv.avatar }}
+                      >
+                        {conv.name.charAt(0)}
+                      </span>
+                    )}
                     <div className="conv-info">
                       <div className="conv-header">
                         <span className="conv-name">{conv.name}</span>

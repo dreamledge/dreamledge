@@ -10,10 +10,11 @@ function Lobby() {
   const { user, userProfile } = useAuthStore();
   const { setUserRole, setIsHost, setCurrentBattle } = useBattleStore();
   const [roomCode, setRoomCode] = useState('');
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeRooms, setActiveRooms] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const username = userProfile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'Anonymous';
 
   useEffect(() => {
     const unsubscribe = battleService.subscribeToWaitingRooms((rooms) => {
@@ -24,15 +25,6 @@ function Lobby() {
     return () => unsubscribe();
   }, []);
 
-  const generateRoomCode = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
-  };
-
   const handleQuickMatch = async () => {
     if (!user) {
       alert('Please sign in first');
@@ -40,17 +32,22 @@ function Lobby() {
     }
     
     try {
-      const username = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous';
-      
-      const roomId = await battleService.createWaitingRoom(
-        'Random Artists',
-        user.uid,
-        username
-      );
-      
+      await battleService.leaveAllUserBattles(user.uid);
+
+      const matchedRoom = await battleService.findMatch('artist', user.uid, username, userProfile?.photoURL || '');
+      if (matchedRoom) {
+        setUserRole(matchedRoom.role || 'artist');
+        setIsHost(false);
+        navigate(`/waiting/${matchedRoom.battleId}`);
+        return;
+      }
+
+      const battleId = await battleService.createWaitingRoom('Random Artists', user.uid, username, 'artist', {
+        photoURL: userProfile?.photoURL || '',
+      });
       setUserRole('artist');
       setIsHost(true);
-      navigate(`/waiting/${roomId}`);
+      navigate(`/waiting/${battleId}`);
     } catch (error) {
       console.error('Match error:', error);
       alert('Error creating room: ' + error.message);
@@ -62,36 +59,51 @@ function Lobby() {
       alert('Please sign in first');
       return;
     }
-    
-    const username = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous';
-    
-    if (role === 'artist') {
-      const roomId = await battleService.createWaitingRoom(
-        `${username}'s Battle`,
-        user.uid,
-        username
-      );
-      setUserRole(role);
-      setIsHost(true);
-      navigate(`/waiting/${roomId}`);
-    } else if (role === 'judge') {
-      const roomId = await battleService.createWaitingRoom(
-        `${username}'s Room`,
-        user.uid,
-        username
-      );
-      setUserRole(role);
-      setIsHost(true);
-      navigate(`/waiting/${roomId}`);
-    } else if (role === 'spectator') {
-      const roomId = await battleService.createWaitingRoom(
-        `${username}'s Room`,
-        user.uid,
-        username
-      );
-      setUserRole(role);
-      setIsHost(true);
-      navigate(`/waiting/${roomId}`);
+    try {
+      if (role === 'artist') {
+        await battleService.leaveAllUserBattles(user.uid);
+
+        const battleId = await battleService.createWaitingRoom(
+          `${username}'s Battle`,
+          user.uid,
+          username,
+          'artist',
+          { visibility: 'private', photoURL: userProfile?.photoURL || '' }
+        );
+        setUserRole(role);
+        setIsHost(true);
+        navigate(`/waiting/${battleId}`);
+      } else if (role === 'judge') {
+        await battleService.leaveAllUserBattles(user.uid);
+
+        const matchedRoom = await battleService.findMatch('judge', user.uid, username, userProfile?.photoURL || '');
+        if (matchedRoom) {
+          setUserRole(matchedRoom.role || 'judge');
+          setIsHost(false);
+          navigate(`/waiting/${matchedRoom.battleId}`);
+          return;
+        }
+
+        const battleId = await battleService.createWaitingRoom('Judge Queue', user.uid, username, 'judge', {
+          photoURL: userProfile?.photoURL || '',
+        });
+        setUserRole('judge');
+        setIsHost(true);
+        navigate(`/waiting/${battleId}`);
+      } else if (role === 'spectator') {
+        await battleService.leaveAllUserBattles(user.uid);
+        const match = await battleService.findSpectatorMatch(user.uid, username, userProfile?.photoURL || '');
+        if (!match) {
+          alert('No battles are open for spectators yet.');
+          return;
+        }
+        setUserRole(role);
+        setIsHost(false);
+        navigate(`/waiting/${match.battleId}`);
+      }
+    } catch (error) {
+      console.error('Role select error:', error);
+      alert(error.message || 'Unable to join room');
     }
   };
 
@@ -102,8 +114,7 @@ function Lobby() {
     }
     
     try {
-      const username = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous';
-      await battleService.joinWaitingRoom(room.id, user.uid, username, 'spectator');
+      await battleService.joinWaitingRoom(room.id, user.uid, username, 'spectator', userProfile?.photoURL || '');
       setUserRole('spectator');
       setIsHost(false);
       navigate(`/waiting/${room.id}`);
@@ -120,11 +131,10 @@ function Lobby() {
     }
     
     try {
-      const username = userProfile?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous';
-      await battleService.joinWaitingRoom(roomCode.toUpperCase(), user.uid, username);
-      setUserRole('spectator');
+      const result = await battleService.joinByCode(roomCode.toUpperCase(), user.uid, username, userProfile?.photoURL || '');
+      setUserRole(result.role);
       setIsHost(false);
-      navigate(`/waiting/${roomCode.toUpperCase()}`);
+      navigate(`/waiting/${result.battleId}`);
     } catch (error) {
       console.error('Join error:', error);
       alert(error.message || 'Room not found');
@@ -249,7 +259,7 @@ function Lobby() {
               <p className="no-rooms">No active battles. Create one or join with a code!</p>
             ) : (
               filteredRooms.map(room => {
-                const playerCount = room.players ? Object.keys(room.players).length : 0;
+                const playerCount = ['artistA', 'artistB', 'judge1', 'judge2'].filter((slot) => room[slot]).length;
                 return (
                   <button 
                     key={room.id} 

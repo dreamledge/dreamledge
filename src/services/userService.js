@@ -53,6 +53,31 @@ export const userService = {
     return null;
   },
 
+  async searchUsers(searchTerm, currentUserId) {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    if (!normalizedSearch) return [];
+
+    const usersRef = collection(db, 'users');
+    const snapshot = await getDocs(usersRef);
+
+    return snapshot.docs
+      .map((userDoc) => ({ id: userDoc.id, ...userDoc.data() }))
+      .filter((profile) => profile.uid && profile.uid !== currentUserId)
+      .filter((profile) => {
+        const searchableValues = [
+          profile.displayName,
+          profile.username,
+          profile.email,
+          profile.uid,
+        ]
+          .filter(Boolean)
+          .map((value) => value.toLowerCase());
+
+        return searchableValues.some((value) => value.includes(normalizedSearch));
+      })
+      .slice(0, 12);
+  },
+
   async updateUserProfile(uid, updates) {
     const userRef = doc(db, 'users', uid);
     await updateDoc(userRef, {

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/appStore';
+import { registerWithEmail, signInWithEmail, signInWithGoogle } from '../services/firebase';
+import { userService } from '../services/userService';
 import { Swords, Users, Mic, Gavel, Eye, ArrowRight, Mail, Lock, User, Trophy } from 'lucide-react';
 import './Home.css';
 
@@ -33,39 +35,45 @@ function Home() {
       return;
     }
 
-    if (formData.password.length < 6) {
+    if (formData.password.length < 6 && !showSignIn) {
       setError('Password must be at least 6 characters');
       setLoadingState(false);
       return;
     }
 
     try {
-      // Create local user profile (works without Firestore)
-      const userId = `user_${Date.now()}`;
-      const newUser = {
-        uid: userId,
-        email: formData.email,
-        displayName: showSignIn ? formData.username : formData.username,
-        photoURL: null,
+      let firebaseUser;
+
+      if (showSignIn) {
+        const result = await signInWithEmail(formData.email, formData.password);
+        firebaseUser = result.user;
+      } else {
+        if (!formData.username.trim()) {
+          setError('Username is required');
+          setLoadingState(false);
+          return;
+        }
+
+        const result = await registerWithEmail(formData.email, formData.password, formData.username.trim());
+        firebaseUser = result.user;
+      }
+
+      const normalizedUser = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || formData.username || formData.email.split('@')[0],
+        photoURL: firebaseUser.photoURL || null,
       };
-      
-      const userProfile = {
-        uid: userId,
-        email: formData.email,
-        displayName: newUser.displayName || formData.email.split('@')[0],
-        bio: '',
-        points: 1000,
-        wins: 0,
-        createdAt: Date.now(),
-      };
-      
-setUser(newUser);
+
+      const userProfile = await userService.createOrUpdateUser(normalizedUser);
+
+      setUser(normalizedUser);
       setUserProfile(userProfile);
       setLoadingState(false);
       navigate('/lobby');
     } catch (err) {
       console.error('Auth error:', err);
-      setError('Failed to process request. Please try again.');
+      setError(err.message || 'Failed to process request. Please try again.');
       setLoadingState(false);
     }
   };
@@ -73,6 +81,33 @@ setUser(newUser);
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setLoadingState(true);
+
+    try {
+      const result = await signInWithGoogle();
+      const firebaseUser = result.user;
+      const normalizedUser = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Dreamledge Artist',
+        photoURL: firebaseUser.photoURL || null,
+      };
+
+      const userProfile = await userService.createOrUpdateUser(normalizedUser);
+
+      setUser(normalizedUser);
+      setUserProfile(userProfile);
+      setLoadingState(false);
+      navigate('/lobby');
+    } catch (err) {
+      console.error('Google auth error:', err);
+      setError(err.message || 'Failed to sign in with Google. Please try again.');
+      setLoadingState(false);
+    }
   };
 
   return (
@@ -125,19 +160,61 @@ setUser(newUser);
           </div>
 
           <div className="hero-visual">
-            <div className="battle-preview">
-              <div className="preview-card artist-1">
-                <div className="preview-avatar">
-                  <Mic size={32} />
+            <div className="media-card">
+              <div className="media-card-header">
+                <div className="media-live-pill">
+                  <span className="media-live-dot"></span>
+                  Live Battle Feed
                 </div>
-                <span className="preview-label">Artist</span>
+                <div className="media-viewers">
+                  <Eye size={14} />
+                  12.4K
+                </div>
               </div>
-              <div className="preview-vs">VS</div>
-              <div className="preview-card artist-2">
-                <div className="preview-avatar">
-                  <Mic size={32} />
+
+              <div className="battle-preview">
+                <div className="preview-card artist-1">
+                  <div className="preview-spotlight"></div>
+                  <div className="preview-avatar">
+                    <Mic size={32} />
+                  </div>
+                  <div className="preview-bars">
+                    <span></span><span></span><span></span><span></span>
+                  </div>
+                  <span className="preview-name">Nova Flame</span>
+                  <span className="preview-label">Round 3 Attack</span>
                 </div>
-                <span className="preview-label">Artist</span>
+
+                <div className="preview-vs-wrap">
+                  <div className="preview-vs">VS</div>
+                  <span className="preview-round">Crowd Vote Open</span>
+                </div>
+
+                <div className="preview-card artist-2">
+                  <div className="preview-spotlight"></div>
+                  <div className="preview-avatar">
+                    <Mic size={32} />
+                  </div>
+                  <div className="preview-bars">
+                    <span></span><span></span><span></span><span></span>
+                  </div>
+                  <span className="preview-name">Rico Verse</span>
+                  <span className="preview-label">Counter Energy</span>
+                </div>
+              </div>
+
+              <div className="media-card-footer">
+                <div className="media-stat">
+                  <span className="media-stat-value">89%</span>
+                  <span className="media-stat-label">retention</span>
+                </div>
+                <div className="media-waveform">
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <div className="media-stat align-right">
+                  <span className="media-stat-value">2:14</span>
+                  <span className="media-stat-label">live set</span>
+                </div>
               </div>
             </div>
           </div>
@@ -182,6 +259,36 @@ setUser(newUser);
               <p className="auth-subtitle">
                 {showSignIn ? 'Sign in to continue to the arena' : 'Create an account to start battling'}
               </p>
+            </div>
+
+            <div className="social-auth-panel">
+              <button
+                type="button"
+                className="google-auth-button"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+              >
+                <span className="google-auth-orb"></span>
+                <span className="google-auth-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="img">
+                    <path fill="#EA4335" d="M12 10.2v3.9h5.42c-.24 1.25-.95 2.31-2 3.03l3.24 2.52c1.89-1.74 2.98-4.31 2.98-7.36 0-.72-.06-1.4-.19-2.06H12Z" />
+                    <path fill="#34A853" d="M12 22c2.7 0 4.97-.89 6.63-2.41l-3.24-2.52c-.9.61-2.05.97-3.39.97-2.6 0-4.81-1.75-5.6-4.11l-3.35 2.58A10 10 0 0 0 12 22Z" />
+                    <path fill="#4A90E2" d="M6.4 13.93A5.96 5.96 0 0 1 6.09 12c0-.67.12-1.32.31-1.93l-3.35-2.58A10 10 0 0 0 2 12c0 1.61.38 3.13 1.05 4.51l3.35-2.58Z" />
+                    <path fill="#FBBC05" d="M12 5.96c1.47 0 2.78.51 3.82 1.5l2.87-2.87C16.96 2.98 14.7 2 12 2a10 10 0 0 0-8.95 5.49l3.35 2.58C7.19 7.71 9.4 5.96 12 5.96Z" />
+                  </svg>
+                </span>
+                <span className="google-auth-copy">
+                  <strong>Continue with Google</strong>
+                  <small>Fast-track your entrance to the arena</small>
+                </span>
+                <ArrowRight size={18} />
+              </button>
+
+              <div className="auth-divider" aria-hidden="true">
+                <span></span>
+                <p>or roll in with email</p>
+                <span></span>
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="auth-form">
