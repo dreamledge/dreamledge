@@ -1,13 +1,26 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore, useUIStore } from '../stores/appStore';
 import { Home, MessageCircle, User, LogOut, Trophy } from 'lucide-react';
+import { chatService } from '../services/chatService';
 import './Navbar.css';
 
 function Navbar() {
-  const { isAuthenticated, logout } = useAuthStore();
+  const { isAuthenticated, logout, user } = useAuthStore();
   const { closeSidebar } = useUIStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user?.uid || !isAuthenticated) {
+      setUnreadCount(0);
+      return undefined;
+    }
+
+    const unsubscribe = chatService.subscribeToUnreadCount(user.uid, setUnreadCount);
+    return () => unsubscribe();
+  }, [isAuthenticated, user?.uid]);
 
   const handleLogout = () => {
     logout();
@@ -35,6 +48,7 @@ function Navbar() {
             to={item.path} 
             className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}
           >
+            {item.path === '/messages' && unreadCount > 0 && <span className="nav-unread-dot" />}
             <item.icon size={24} />
             <span>{item.label}</span>
           </NavLink>

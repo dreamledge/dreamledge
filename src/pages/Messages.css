@@ -179,6 +179,11 @@
   min-width: 0;
 }
 
+.conv-info {
+  display: grid;
+  gap: 0.2rem;
+}
+
 .conv-header {
   display: flex;
   justify-content: space-between;
@@ -205,6 +210,21 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.conversation-state {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.conversation-state.unread {
+  color: #ff8d96;
+}
+
+.conversation-state.read {
+  color: rgba(255,255,255,0.42);
 }
 
 .room-members {
@@ -304,6 +324,28 @@
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+}
+
+.chat-empty-state {
+  margin: auto;
+  padding: 1.2rem 1.35rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  text-align: center;
+  color: rgba(255,255,255,0.62);
+}
+
+.chat-empty-state strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.chat-empty-state p {
+  margin: 0;
+  font-size: 0.82rem;
 }
 
 .chat-view-message {

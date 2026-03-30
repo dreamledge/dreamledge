@@ -7,13 +7,6 @@ import { Search, Plus, Send, Users, MessageCircle, Hash, ArrowLeft, X, Check } f
 import GifPicker from '../components/GifPicker';
 import './Messages.css';
 
-const DEMO_CONVERSATIONS = [
-  { id: '1', type: 'dm', name: 'MC_Flow', avatar: '#e63946', lastMessage: 'GG last battle!', time: '2:30 PM', unread: 2 },
-  { id: '2', type: 'dm', name: 'Judge_Dave', avatar: '#2ecc71', lastMessage: 'Your flow was clean', time: '1:15 PM', unread: 0 },
-  { id: '3', type: 'room', name: 'Battle Lounge', avatar: '#3498db', lastMessage: 'Who\'s ready for the next battle?', time: '12:45 PM', unread: 5, members: 24 },
-  { id: '4', type: 'room', name: 'Underground Cypher', avatar: '#9b59b6', lastMessage: 'New track just dropped!', time: 'Yesterday', unread: 0, members: 156 },
-];
-
 const DEMO_ROOMS = [
   { id: 'room1', name: 'Battle Lounge', members: 24, isPublic: true },
   { id: 'room2', name: 'Underground Cypher', members: 156, isPublic: true },
@@ -41,7 +34,7 @@ function Messages() {
   const navigate = useNavigate();
   const { user, userProfile } = useAuthStore();
   const { isGifPickerOpen, toggleGifPicker, closeGifPicker } = useUIStore();
-  const [conversations, setConversations] = useState(DEMO_CONVERSATIONS);
+  const [conversations, setConversations] = useState([]);
   const [rooms, setRooms] = useState(DEMO_ROOMS);
   const [activeTab, setActiveTab] = useState(conversationId ? 'chat' : 'dms');
   const [selectedConversation, setSelectedConversation] = useState(null);
@@ -57,15 +50,61 @@ function Messages() {
   const chatMessagesRef = useRef(null);
 
   useEffect(() => {
+    if (!user?.uid) {
+      setConversations([]);
+      return undefined;
+    }
+
+    const unsubscribe = chatService.subscribeToUserChats(user.uid, (nextConversations) => {
+      setConversations(nextConversations);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  useEffect(() => {
     if (conversationId) {
-      const conv = conversations.find(c => c.id === conversationId);
+      const conv = conversations.find(c => c.id === conversationId)
+        || rooms.find((room) => room.id === conversationId);
       if (conv) {
-        setSelectedConversation(conv);
-        setMessages(conv.type === 'room' ? ROOM_MESSAGES : DEMO_MESSAGES);
+        setSelectedConversation((current) => {
+          if (current?.id === conv.id) {
+            return { ...current, ...conv };
+          }
+          return conv;
+        });
+
+        if (selectedConversation?.id !== conv.id) {
+          setMessages(conv.type === 'room' ? ROOM_MESSAGES : []);
+        }
+
         setActiveTab('chat');
+      } else {
+        setSelectedConversation(null);
+        setMessages([]);
+        setActiveTab('dms');
       }
     }
-  }, [conversationId, conversations]);
+  }, [conversationId, conversations, rooms, selectedConversation?.id]);
+
+  useEffect(() => {
+    if (!selectedConversation || selectedConversation.type !== 'dm') {
+      return;
+    }
+
+    const latestConversation = conversations.find((conversation) => conversation.id === selectedConversation.id);
+    if (
+      latestConversation
+      && (
+        latestConversation.lastMessage !== selectedConversation.lastMessage
+        || latestConversation.time !== selectedConversation.time
+        || latestConversation.unread !== selectedConversation.unread
+        || latestConversation.photoURL !== selectedConversation.photoURL
+      )
+    ) {
+      setSelectedConversation((current) => ({ ...current, ...latestConversation }));
+    }
+  }, [conversations, selectedConversation]);
 
   useEffect(() => {
     if (chatMessagesRef.current) {
@@ -91,12 +130,18 @@ function Messages() {
     return () => unsubscribe();
   }, [selectedConversation]);
 
+  useEffect(() => {
+    if (selectedConversation?.type === 'dm' && user?.uid) {
+      chatService.markConversationRead(user.uid, selectedConversation.id);
+    }
+  }, [messages, selectedConversation, user?.uid]);
+
   const filteredConversations = conversations.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase())
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredRooms = rooms.filter(r => 
-    r.name.toLowerCase().includes(searchQuery.toLowerCase())
+    (r.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   useEffect(() => {
@@ -140,15 +185,16 @@ function Messages() {
     };
   }, [activeTab, searchQuery, user?.uid]);
 
-  const openDirectMessage = (profile) => {
+  const openDirectMessage = async (profile) => {
     const dmId = [user?.uid || 'me', profile.uid].sort().join('__');
     const existingConversation = conversations.find((conversation) => conversation.id === dmId);
+    const safeName = profile.displayName || profile.username || profile.email || profile.uid || 'Unknown user';
 
     const directConversation = existingConversation || {
       id: dmId,
       type: 'dm',
       uid: profile.uid,
-      name: profile.displayName || profile.username || profile.email || profile.uid,
+      name: safeName,
       avatar: profile.photoURL || '#e63946',
       photoURL: profile.photoURL || null,
       lastMessage: 'Start the conversation',
@@ -156,17 +202,41 @@ function Messages() {
       unread: 0,
     };
 
-    if (!existingConversation) {
-      setConversations((prev) => [directConversation, ...prev.filter((conversation) => conversation.id !== dmId)]);
-    }
+    try {
+      if (user?.uid) {
+        await chatService.createOrOpenDirectConversation({
+          chatId: dmId,
+          sender: {
+            uid: user.uid,
+            displayName: userProfile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'Anonymous',
+            photoURL: userProfile?.photoURL || user?.photoURL || null,
+          },
+          recipient: {
+            uid: profile.uid,
+            displayName: safeName,
+            photoURL: profile.photoURL || null,
+          },
+        });
+      }
 
-    handleSelectConversation(directConversation);
+      if (!existingConversation) {
+        setConversations((prev) => [directConversation, ...prev.filter((conversation) => conversation.id !== dmId)]);
+      }
+
+      setSearchQuery('');
+      handleSelectConversation(directConversation);
+    } catch (error) {
+      console.error('Failed to open direct message:', error);
+    }
   };
 
   const handleSelectConversation = (conv) => {
     setSelectedConversation(conv);
-    setMessages(conv.type === 'room' ? ROOM_MESSAGES : DEMO_MESSAGES);
+    setMessages(conv.type === 'room' ? ROOM_MESSAGES : []);
     setActiveTab('chat');
+    if (conv.type === 'dm' && user?.uid) {
+      chatService.markConversationRead(user.uid, conv.id);
+    }
     navigate(`/messages/${conv.id}`, { replace: true });
   };
 
@@ -177,7 +247,6 @@ function Messages() {
     const messageText = newMessage;
     setNewMessage('');
 
-    const chatType = selectedConversation.type === 'room' ? 'rooms' : 'dms';
     const username = userProfile?.displayName || user?.displayName || 'Anonymous';
     
     const tempMessage = {
@@ -192,13 +261,30 @@ function Messages() {
     setMessages(prev => [...prev, tempMessage]);
     
     try {
-      await chatService.sendMessage(
-        chatType,
-        selectedConversation.id,
-        user?.uid || 'me',
-        username,
-        messageText
-      );
+      if (selectedConversation.type === 'room') {
+        await chatService.sendMessage(
+          'rooms',
+          selectedConversation.id,
+          user?.uid || 'me',
+          username,
+          messageText
+        );
+      } else if (selectedConversation.uid && user?.uid) {
+        await chatService.sendDirectMessage({
+          chatId: selectedConversation.id,
+          sender: {
+            uid: user.uid,
+            displayName: username,
+            photoURL: userProfile?.photoURL || user?.photoURL || null,
+          },
+          recipient: {
+            uid: selectedConversation.uid,
+            displayName: selectedConversation.name,
+            photoURL: selectedConversation.photoURL || null,
+          },
+          message: messageText,
+        });
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
     }
@@ -207,7 +293,6 @@ function Messages() {
   const handleSendGif = async (gifUrl) => {
     if (!selectedConversation) return;
 
-    const chatType = selectedConversation.type === 'room' ? 'rooms' : 'dms';
     const username = userProfile?.displayName || user?.displayName || 'Anonymous';
     
     const tempMessage = {
@@ -223,15 +308,34 @@ function Messages() {
     setMessages(prev => [...prev, tempMessage]);
     
     try {
-      await chatService.sendMessage(
-        chatType,
-        selectedConversation.id,
-        user?.uid || 'me',
-        username,
-        '',
-        true,
-        gifUrl
-      );
+      if (selectedConversation.type === 'room') {
+        await chatService.sendMessage(
+          'rooms',
+          selectedConversation.id,
+          user?.uid || 'me',
+          username,
+          '',
+          true,
+          gifUrl
+        );
+      } else if (selectedConversation.uid && user?.uid) {
+        await chatService.sendDirectMessage({
+          chatId: selectedConversation.id,
+          sender: {
+            uid: user.uid,
+            displayName: username,
+            photoURL: userProfile?.photoURL || user?.photoURL || null,
+          },
+          recipient: {
+            uid: selectedConversation.uid,
+            displayName: selectedConversation.name,
+            photoURL: selectedConversation.photoURL || null,
+          },
+          message: '',
+          isGif: true,
+          gifUrl,
+        });
+      }
     } catch (error) {
       console.error('Failed to send GIF:', error);
     }
@@ -285,17 +389,17 @@ function Messages() {
               </button>
               <div className="chat-view-info">
                 {selectedConversation.photoURL ? (
-                  <img src={selectedConversation.photoURL} alt={selectedConversation.name} className="chat-view-avatar user-result-avatar" />
+                  <img src={selectedConversation.photoURL} alt={selectedConversation.name || 'Conversation'} className="chat-view-avatar user-result-avatar" />
                 ) : (
                   <span 
                     className="chat-view-avatar"
                     style={{ background: selectedConversation.avatar }}
                   >
-                    {selectedConversation.type === 'room' ? <Hash size={18} /> : selectedConversation.name.charAt(0)}
+                    {selectedConversation.type === 'room' ? <Hash size={18} /> : (selectedConversation.name || '?').charAt(0)}
                   </span>
                 )}
                 <div className="chat-view-details">
-                  <h2 className="chat-view-name">{selectedConversation.name}</h2>
+                  <h2 className="chat-view-name">{selectedConversation.name || 'Conversation'}</h2>
                   {selectedConversation.type === 'room' && (
                     <span className="chat-view-meta">
                       <Users size={12} />
@@ -307,6 +411,12 @@ function Messages() {
             </header>
 
             <div className="chat-view-messages" ref={chatMessagesRef}>
+              {messages.length === 0 && selectedConversation.type === 'dm' && (
+                <div className="chat-empty-state">
+                  <strong>No messages yet</strong>
+                  <p>Say hi to start the conversation.</p>
+                </div>
+              )}
               {messages.map(msg => (
                 <div 
                   key={msg.id} 
@@ -334,13 +444,13 @@ function Messages() {
               >
                 GIF
               </button>
-              <input
-                type="text"
-                className="input"
-                placeholder={`Message ${selectedConversation.name}`}
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-              />
+                <input
+                  type="text"
+                  className="input"
+                  placeholder={`Message ${selectedConversation.name || 'this conversation'}`}
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                />
               <button type="submit" className="send-btn" disabled={!newMessage.trim()}>
                 <Send size={20} />
               </button>
@@ -422,28 +532,31 @@ function Messages() {
                   </div>
                 )}
 
-                {filteredConversations.filter(c => c.type === 'dm').map(conv => (
+                  {filteredConversations.filter(c => c.type === 'dm').map(conv => (
                   <button
                     key={conv.id}
                     className="conversation-item"
                     onClick={() => handleSelectConversation(conv)}
                   >
                     {conv.photoURL ? (
-                      <img src={conv.photoURL} alt={conv.name} className="conv-avatar user-result-avatar" />
+                      <img src={conv.photoURL} alt={conv.name || 'Conversation'} className="conv-avatar user-result-avatar" />
                     ) : (
                       <span 
                         className="conv-avatar"
                         style={{ background: conv.avatar }}
                       >
-                        {conv.name.charAt(0)}
+                        {(conv.name || '?').charAt(0)}
                       </span>
                     )}
                     <div className="conv-info">
                       <div className="conv-header">
-                        <span className="conv-name">{conv.name}</span>
+                        <span className="conv-name">{conv.name || 'Conversation'}</span>
                         <span className="conv-time">{conv.time}</span>
                       </div>
                       <p className="conv-preview">{conv.lastMessage}</p>
+                      <span className={`conversation-state ${conv.unread > 0 ? 'unread' : 'read'}`}>
+                        {conv.unread > 0 ? 'Unread' : 'Read'}
+                      </span>
                     </div>
                     {conv.unread > 0 && (
                       <span className="unread-badge">{conv.unread}</span>

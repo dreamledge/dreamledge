@@ -42,6 +42,17 @@
   opacity: 0;
 }
 
+.nav-unread-dot {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.65rem;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #ff4454;
+  box-shadow: 0 0 0 3px rgba(10, 10, 10, 0.92), 0 0 16px rgba(255, 68, 84, 0.6);
+}
+
 .mobile-nav-item:hover {
   color: rgba(255, 255, 255, 0.88);
   background: rgba(255, 255, 255, 0.05);
@@ -91,6 +102,13 @@
   .mobile-nav-item {
     padding: 0.68rem 0.25rem;
     border-radius: 16px;
+  }
+
+  .nav-unread-dot {
+    top: 0.55rem;
+    right: 0.45rem;
+    width: 9px;
+    height: 9px;
   }
 
   .mobile-nav-item span {
