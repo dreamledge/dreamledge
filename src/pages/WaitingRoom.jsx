@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore, useBattleStore, useUIStore } from '../stores/appStore';
 import { battleService } from '../services/battleService';
+import { getBattleSessionId } from '../services/battleSession';
 import { connectToLiveKitRoom, disconnectFromLiveKitRoom, getRoomMediaDiagnostics, setLiveKitMediaEnabled } from '../services/livekitService';
 import { Mic, Gavel, Users, Copy, Check, Send, X, Video, VideoOff, MicOff, Mic as MicOn } from 'lucide-react';
 import LiveMediaTile from '../components/LiveMediaTile';
@@ -10,6 +11,14 @@ import './WaitingRoom.css';
 
 const SLOT_ORDER = ['artistA', 'artistB', 'judge1', 'judge2'];
 const COUNTDOWN_THRESHOLDS = [30, 10, 5, 4, 3, 2, 1];
+const PARTICIPANT_STALE_MS = 45_000;
+
+function timestampToMs(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  return 0;
+}
 
 function WaitingRoom() {
   const { roomId } = useParams();
@@ -45,15 +54,43 @@ function WaitingRoom() {
   const stageSectionRef = useRef(null);
   const chatSectionRef = useRef(null);
   const announcedThresholdsRef = useRef(new Set());
+  const localSessionId = useMemo(() => getBattleSessionId(), []);
 
   const currentUserParticipant = useMemo(
     () => participants.find((participant) => participant.uid === user?.uid) || null,
     [participants, user?.uid],
   );
+  const participantsByUid = useMemo(
+    () => new Map(participants.map((participant) => [participant.uid, participant])),
+    [participants],
+  );
 
   const artists = useMemo(() => participants.filter((participant) => participant.role === 'artistA' || participant.role === 'artistB'), [participants]);
   const judges = useMemo(() => participants.filter((participant) => participant.role === 'judge1' || participant.role === 'judge2'), [participants]);
   const spectators = useMemo(() => participants.filter((participant) => participant.role === 'spectator'), [participants]);
+  const participantsBySlot = useMemo(() => {
+    const seenUsers = new Set();
+
+    return SLOT_ORDER.map((slot) => {
+      const assignedUid = battle?.[slot];
+      if (!assignedUid || seenUsers.has(assignedUid)) {
+        return null;
+      }
+
+      const participant = participantsByUid.get(assignedUid) || null;
+      if (!participant) {
+        return null;
+      }
+
+      const lastSeenMs = timestampToMs(participant.lastSeenAt || participant.updatedAt || participant.joinedAt);
+      if (!lastSeenMs || Date.now() - lastSeenMs > PARTICIPANT_STALE_MS) {
+        return null;
+      }
+
+      seenUsers.add(assignedUid);
+      return participant;
+    });
+  }, [battle, participantsByUid]);
   const canStart = !!(battle?.artistA && battle?.artistB && battle?.judge1 && battle?.judge2);
   const myBattleRole = currentUserParticipant?.role || null;
   const isArtistRole = myBattleRole === 'artistA' || myBattleRole === 'artistB';
@@ -144,6 +181,33 @@ function WaitingRoom() {
       disposed = true;
     };
   }, [battle, currentUserParticipant?.role, liveKitRoom, user, user?.displayName, user?.uid, userProfile?.displayName, userRole]);
+
+  useEffect(() => {
+    if (!battle?.id) return;
+
+    const assigned = SLOT_ORDER.map((slot) => battle[slot]).filter(Boolean);
+    if (new Set(assigned).size === assigned.length) return;
+
+    battleService.sanitizeRequiredSlots(battle.id, battle).catch((error) => {
+      console.error('Failed to sanitize waiting room slots:', error);
+    });
+  }, [battle]);
+
+  useEffect(() => {
+    if (!roomId || !user?.uid) return undefined;
+
+    battleService.updateParticipantPresence(roomId, user.uid, localSessionId).catch((error) => {
+      console.error('Failed to update waiting room presence:', error);
+    });
+
+    const interval = setInterval(() => {
+      battleService.updateParticipantPresence(roomId, user.uid, localSessionId).catch((error) => {
+        console.error('Failed to refresh waiting room presence:', error);
+      });
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [localSessionId, roomId, user?.uid]);
 
   useEffect(() => {
     if (!battle) return undefined;
@@ -392,17 +456,6 @@ function WaitingRoom() {
     return 'spectator';
   };
 
-  const participantsBySlot = SLOT_ORDER.map((slot) => {
-    const participantForSlot = participants.find((participant) => participant.role === slot) || null;
-    if (!participantForSlot) return null;
-
-    const duplicateByUid = participants.filter((participant) => participant.uid === participantForSlot.uid);
-    if (duplicateByUid.length > 1) {
-      return duplicateByUid.find((participant) => participant.role === slot) || null;
-    }
-
-    return participantForSlot;
-  });
   const getLiveParticipant = (uid) => liveParticipants.find((participant) => participant.identity === uid);
   const displayedMessages = [...chatMessages, ...countdownMessages];
 

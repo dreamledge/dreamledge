@@ -186,6 +186,16 @@
     linear-gradient(180deg, #171717, #0d0d0d);
 }
 
+.video-overlay {
+  position: absolute;
+  inset: 0;
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.7));
+}
+
 .video-content {
   min-height: 170px;
   display: flex;
@@ -649,7 +659,7 @@
 
   .arena-tile .video-overlay {
     padding: 0.55rem;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: stretch;
     background: linear-gradient(180deg, rgba(0,0,0,0.06), rgba(0,0,0,0.82));
   }
@@ -695,7 +705,6 @@
     gap: 0.28rem;
     align-items: flex-start;
     min-width: 0;
-    margin-top: auto;
   }
 
   .arena-tile .participant-name {

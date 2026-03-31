@@ -30,6 +30,7 @@ const SELECTION_MS = 30_000;
 const VOTING_MS = 30_000;
 const ARTIST_MS = 180_000;
 const OVERTIME_MS = 60_000;
+const PARTICIPANT_STALE_MS = 45_000;
 
 function battlesCollection() {
   return collection(db, COLLECTION);
@@ -45,6 +46,10 @@ function participantsCollection(battleId) {
 
 function participantDoc(battleId, uid) {
   return doc(db, COLLECTION, battleId, 'participants', uid);
+}
+
+function publicMatchmakingDoc() {
+  return doc(db, 'system', 'public-matchmaking');
 }
 
 function messagesCollection(battleId) {
@@ -103,6 +108,7 @@ function buildParticipant({ uid, role, displayName, photoURL, sessionId }) {
     isMicOn: true,
     isCameraOn: true,
     joinedAt: serverTimestamp(),
+    lastSeenAt: serverTimestamp(),
   };
 }
 
@@ -138,6 +144,13 @@ function getRoleForSlot(slot) {
   return 'spectator';
 }
 
+function getRequestedRoleFromPreference(slotPreference = []) {
+  if (!slotPreference.length) return 'spectator';
+  if (slotPreference.every((slot) => slot === 'artistA' || slot === 'artistB')) return 'artist';
+  if (slotPreference.every((slot) => slot === 'judge1' || slot === 'judge2')) return 'judge';
+  return 'mixed';
+}
+
 function getCountdownStartMs(value) {
   if (!value) return 0;
   if (typeof value.toMillis === 'function') return value.toMillis();
@@ -147,6 +160,39 @@ function getCountdownStartMs(value) {
 
 function hasRequiredSlotsFilled(battle) {
   return REQUIRED_SLOTS.every((slot) => !!battle[slot]);
+}
+
+function getDuplicateSlotCleanup(battle) {
+  const seenUsers = new Set();
+  const updates = {};
+
+  REQUIRED_SLOTS.forEach((slot) => {
+    const assignedUid = battle?.[slot];
+    if (!assignedUid) return;
+
+    if (seenUsers.has(assignedUid)) {
+      updates[slot] = null;
+      return;
+    }
+
+    seenUsers.add(assignedUid);
+  });
+
+  return updates;
+}
+
+function timestampToMs(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  return 0;
+}
+
+function isParticipantStale(participant) {
+  if (!participant) return true;
+  const lastSeenMs = timestampToMs(participant.lastSeenAt || participant.updatedAt || participant.joinedAt);
+  if (!lastSeenMs) return true;
+  return Date.now() - lastSeenMs > PARTICIPANT_STALE_MS;
 }
 
 function getCurrentTurnMs(battle) {
@@ -216,86 +262,47 @@ async function assignSlotAndJoin({ battleId, uid, displayName, photoURL, slotPre
 
     const participantSnap = await transaction.get(participantRef);
     const battle = battleSnap.data();
-    const alreadyAssignedSlot = REQUIRED_SLOTS.find((slot) => battle[slot] === uid) || null;
-    let assignedSlot = alreadyAssignedSlot;
-
-    if (!assignedSlot) {
-      const occupiedElsewhere = REQUIRED_SLOTS.filter((slot) => battle[slot] === uid);
-      if (occupiedElsewhere.length > 1) {
-        throw new Error('User already occupies multiple required roles in this room');
-      }
-    }
-
-    if (!assignedSlot && !participantSnap.exists()) {
-      assignedSlot = getOpenSlot(battle, slotPreference);
-    }
-
-    if (!assignedSlot && participantSnap.exists()) {
+    if (participantSnap.exists()) {
+      const requestedRole = getRequestedRoleFromPreference(slotPreference);
       const existingParticipant = participantSnap.data();
+      const assignedSlot = REQUIRED_SLOTS.find((slot) => battle[slot] === uid) || existingParticipant.role;
+
+      if (requestedRole !== 'spectator' && !slotPreference.includes(assignedSlot)) {
+        throw new Error(`This room already has you assigned as ${getRoleForSlot(assignedSlot)}.`);
+      }
+
       transaction.set(
         participantRef,
         {
           displayName,
           photoURL: photoURL || '',
           sessionId: sessionId || '',
+          lastSeenAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         },
         { merge: true },
       );
-      return {
+
+      return buildJoinResult({
         battleId,
-        role: existingParticipant.role,
-        slot: existingParticipant.role,
+        role: assignedSlot,
         transitionedToSelection: false,
         livekitRoomName: battle.livekitRoomName || battleId,
         status: battle.status,
-      };
+      });
     }
 
-    const role = assignedSlot ? assignedSlot : 'spectator';
-    const updates = {
-      updatedAt: serverTimestamp(),
-    };
-
-    if (assignedSlot) {
-      updates[assignedSlot] = uid;
-    }
-
-    const roleFields = {
-      ...battle,
-      ...updates,
-    };
-
-    const transitionedToSelection = battle.status === 'waiting' && hasRequiredSlotsFilled(roleFields);
-
-    if (transitionedToSelection) {
-      updates.status = 'selection';
-      updates.phaseStartTime = nowTimestamp();
-      updates.currentTurn = null;
-      updates.livekitRoomName = battle.livekitRoomName || battleId;
-    }
-
-    transaction.update(battleRef, updates);
-    transaction.set(
+    return assignParticipantInTransaction({
+      transaction,
+      battleRef,
       participantRef,
-      buildParticipant({
-        uid,
-        role,
-        displayName,
-        photoURL,
-        sessionId,
-      }),
-      { merge: true },
-    );
-
-    return {
-      battleId,
-      role: getRoleForSlot(role),
-      slot: role,
-      transitionedToSelection,
-      livekitRoomName: battle.livekitRoomName || battleId,
-      status: transitionedToSelection ? 'selection' : battle.status,
-    };
+      battle,
+      uid,
+      displayName,
+      photoURL,
+      slotPreference,
+      sessionId,
+    });
   });
 
   if (resolved.transitionedToSelection) {
@@ -303,6 +310,66 @@ async function assignSlotAndJoin({ battleId, uid, displayName, photoURL, slotPre
   }
 
   return resolved;
+}
+
+function buildJoinResult({ battleId, role, transitionedToSelection, status, livekitRoomName }) {
+  return {
+    battleId,
+    role: getRoleForSlot(role),
+    slot: role,
+    transitionedToSelection,
+    livekitRoomName,
+    status,
+  };
+}
+
+function assignParticipantInTransaction({ transaction, battleRef, participantRef, battle, uid, displayName, photoURL, slotPreference, sessionId }) {
+  const requestedRole = getRequestedRoleFromPreference(slotPreference);
+  const alreadyAssignedSlot = REQUIRED_SLOTS.find((slot) => battle[slot] === uid) || null;
+  let assignedSlot = alreadyAssignedSlot;
+
+  if (assignedSlot && slotPreference.length && !slotPreference.includes(assignedSlot)) {
+    throw new Error(`This room already has you assigned as ${getRoleForSlot(assignedSlot)}.`);
+  }
+
+  if (!assignedSlot) {
+    assignedSlot = getOpenSlot(battle, slotPreference);
+  }
+
+  const role = requestedRole === 'spectator' ? 'spectator' : assignedSlot;
+  if (requestedRole !== 'spectator' && !role) {
+    throw new Error(`No ${requestedRole} slots are open in this room.`);
+  }
+
+  const updates = { updatedAt: serverTimestamp() };
+  if (assignedSlot) {
+    updates[assignedSlot] = uid;
+  }
+
+  const roleFields = { ...battle, ...updates };
+  const transitionedToSelection = battle.status === 'waiting' && hasRequiredSlotsFilled(roleFields);
+
+  if (transitionedToSelection) {
+    updates.status = 'selection';
+    updates.phaseStartTime = nowTimestamp();
+    updates.currentTurn = null;
+    updates.livekitRoomName = battle.livekitRoomName || battleRef.id;
+  }
+
+  transaction.update(battleRef, updates);
+  transaction.set(
+    participantRef,
+    buildParticipant({ uid, role, displayName, photoURL, sessionId }),
+    { merge: true },
+  );
+
+  return buildJoinResult({
+    battleId: battleRef.id,
+    role,
+    transitionedToSelection,
+    livekitRoomName: battle.livekitRoomName || battleRef.id,
+    status: transitionedToSelection ? 'selection' : battle.status,
+  });
 }
 
 async function maybeAdvanceBattlePhaseInternal(battleId, battle) {
@@ -445,6 +512,75 @@ async function maybeAdvanceBattlePhaseInternal(battleId, battle) {
 }
 
 export const battleService = {
+  async joinOrCreatePublicMatch(role, userId, displayName, photoURL = '', sessionId = '') {
+    await ensureFirebaseSession();
+
+    if (role === 'spectator') {
+      return this.findSpectatorMatch(userId, displayName, photoURL, sessionId);
+    }
+
+    const matchRef = publicMatchmakingDoc();
+    const newBattleRef = doc(battlesCollection());
+    const slotPreference = RANDOM_ROLE_SLOT_ORDER[role] || [];
+
+    const result = await runTransaction(db, async (transaction) => {
+      const lockSnap = await transaction.get(matchRef);
+      const currentBattleId = lockSnap.exists() ? lockSnap.data()?.currentPublicBattleId : null;
+
+      let targetBattleRef = null;
+      let targetBattle = null;
+
+      if (currentBattleId) {
+        const candidateRef = battleDoc(currentBattleId);
+        const candidateSnap = await transaction.get(candidateRef);
+        if (candidateSnap.exists()) {
+          const candidateBattle = candidateSnap.data();
+          if (!candidateBattle.isCustom && candidateBattle.status === 'waiting' && getOpenSlot(candidateBattle, slotPreference)) {
+            targetBattleRef = candidateRef;
+            targetBattle = candidateBattle;
+          }
+        }
+      }
+
+      if (!targetBattleRef) {
+        targetBattleRef = newBattleRef;
+        targetBattle = {
+          ...defaultBattleData({ createdBy: userId, createdByName: displayName, isCustom: false, roomCode: null }),
+          livekitRoomName: newBattleRef.id,
+          name: 'Public Battle Room',
+        };
+        transaction.set(targetBattleRef, targetBattle);
+      }
+
+      const participantRef = participantDoc(targetBattleRef.id, userId);
+      const joinResult = assignParticipantInTransaction({
+        transaction,
+        battleRef: targetBattleRef,
+        participantRef,
+        battle: targetBattle,
+        uid: userId,
+        displayName,
+        photoURL,
+        slotPreference,
+        sessionId,
+      });
+
+      const roomAfterJoin = {
+        ...targetBattle,
+        ...(joinResult.slot ? { [joinResult.slot]: userId } : {}),
+      };
+
+      transaction.set(matchRef, {
+        currentPublicBattleId: hasRequiredSlotsFilled(roomAfterJoin) ? null : targetBattleRef.id,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      return joinResult;
+    });
+
+    return result;
+  },
+
   async createWaitingRoom(roomName, hostUserId, hostUsername, preferredRole = 'artist', options = {}) {
     await ensureFirebaseSession();
     const battleRef = doc(battlesCollection());
@@ -481,10 +617,12 @@ export const battleService = {
     const battleQuery = query(battlesCollection(), where('status', '==', 'waiting'));
     const snapshot = await getDocs(battleQuery);
     const candidates = [];
+    const slotPreference = RANDOM_ROLE_SLOT_ORDER[role] || [];
     snapshot.forEach((docSnap) => {
       const battle = { id: docSnap.id, ...docSnap.data() };
       if (battle.isCustom) return;
       if (battleIncludesUser(battle, userId)) return;
+      if (!getOpenSlot(battle, slotPreference)) return;
       candidates.push(battle);
     });
 
@@ -503,7 +641,7 @@ export const battleService = {
       uid: userId,
       displayName,
       photoURL,
-      slotPreference: RANDOM_ROLE_SLOT_ORDER[role],
+      slotPreference,
       sessionId,
     });
   },
@@ -820,7 +958,20 @@ export const battleService = {
 
   async updateParticipantMediaState(battleId, uid, updates) {
     await ensureFirebaseSession();
-    await setDoc(participantDoc(battleId, uid), updates, { merge: true });
+    await setDoc(participantDoc(battleId, uid), { ...updates, lastSeenAt: serverTimestamp() }, { merge: true });
+  },
+
+  async updateParticipantPresence(battleId, uid, sessionId = '') {
+    await ensureFirebaseSession();
+    await setDoc(
+      participantDoc(battleId, uid),
+      {
+        sessionId,
+        lastSeenAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
   },
 
   async maybeAdvanceBattlePhase(battleId) {
@@ -830,6 +981,48 @@ export const battleService = {
       return null;
     }
     return maybeAdvanceBattlePhaseInternal(battleId, { id: snap.id, ...snap.data() });
+  },
+
+  async sanitizeRequiredSlots(battleId, battleData = null) {
+    await ensureFirebaseSession();
+    const battle = battleData || (await getDoc(battleDoc(battleId))).data();
+    if (!battle) return null;
+
+    const duplicateCleanup = getDuplicateSlotCleanup(battle);
+    const staleCleanup = {};
+
+    await Promise.all(
+      REQUIRED_SLOTS.map(async (slot) => {
+        const assignedUid = battle?.[slot];
+        if (!assignedUid || duplicateCleanup[slot] === null) return;
+
+        const participantSnap = await getDoc(participantDoc(battleId, assignedUid));
+        if (!participantSnap.exists() || isParticipantStale(participantSnap.data())) {
+          staleCleanup[slot] = null;
+        }
+      }),
+    );
+
+    const combinedCleanup = {
+      ...duplicateCleanup,
+      ...staleCleanup,
+    };
+
+    if (!Object.keys(combinedCleanup).length) {
+      return battle;
+    }
+
+    const updates = {
+      ...combinedCleanup,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (!hasRequiredSlotsFilled({ ...battle, ...combinedCleanup })) {
+      updates.status = battle.status === 'waiting' ? 'waiting' : battle.status;
+    }
+
+    await updateDoc(battleDoc(battleId), updates);
+    return { ...battle, ...updates };
   },
 };
 

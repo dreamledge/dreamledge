@@ -36,21 +36,10 @@ function Lobby() {
     try {
       await battleService.leaveAllUserBattles(user.uid);
 
-      const matchedRoom = await battleService.findMatch('artist', user.uid, username, userProfile?.photoURL || '', sessionId);
-      if (matchedRoom) {
-        setUserRole(matchedRoom.role || 'artist');
-        setIsHost(false);
-        navigate(`/arena/${matchedRoom.battleId}`);
-        return;
-      }
-
-      const battleId = await battleService.createWaitingRoom('Random Artists', user.uid, username, 'artist', {
-        photoURL: userProfile?.photoURL || '',
-        sessionId,
-      });
-      setUserRole('artist');
-      setIsHost(true);
-      navigate(`/arena/${battleId}`);
+      const matchedRoom = await battleService.joinOrCreatePublicMatch('artist', user.uid, username, userProfile?.photoURL || '', sessionId);
+      setUserRole(matchedRoom.role || 'artist');
+      setIsHost(false);
+      navigate(`/arena/${matchedRoom.battleId}`);
     } catch (error) {
       console.error('Match error:', error);
       alert('Error creating room: ' + error.message);
@@ -79,24 +68,13 @@ function Lobby() {
       } else if (role === 'judge') {
         await battleService.leaveAllUserBattles(user.uid);
 
-        const matchedRoom = await battleService.findMatch('judge', user.uid, username, userProfile?.photoURL || '', sessionId);
-        if (matchedRoom) {
-          setUserRole(matchedRoom.role || 'judge');
-          setIsHost(false);
-          navigate(`/arena/${matchedRoom.battleId}`);
-          return;
-        }
-
-        const battleId = await battleService.createWaitingRoom('Judge Queue', user.uid, username, 'judge', {
-          photoURL: userProfile?.photoURL || '',
-          sessionId,
-        });
-        setUserRole('judge');
-        setIsHost(true);
-        navigate(`/arena/${battleId}`);
+        const matchedRoom = await battleService.joinOrCreatePublicMatch('judge', user.uid, username, userProfile?.photoURL || '', sessionId);
+        setUserRole(matchedRoom.role || 'judge');
+        setIsHost(false);
+        navigate(`/arena/${matchedRoom.battleId}`);
       } else if (role === 'spectator') {
         await battleService.leaveAllUserBattles(user.uid);
-        const match = await battleService.findSpectatorMatch(user.uid, username, userProfile?.photoURL || '', sessionId);
+        const match = await battleService.joinOrCreatePublicMatch('spectator', user.uid, username, userProfile?.photoURL || '', sessionId);
         if (!match) {
           alert('No battles are open for spectators yet.');
           return;

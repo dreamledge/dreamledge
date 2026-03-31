@@ -11,6 +11,7 @@ import './Arena.css';
 
 const COUNTDOWN_THRESHOLDS = [30, 10, 5, 4, 3, 2, 1];
 const SLOT_ORDER = ['artistA', 'artistB', 'judge1', 'judge2'];
+const PARTICIPANT_STALE_MS = 45_000;
 
 function getRoleLabel(slot) {
   if (slot === 'artistA') return 'Artist 1';
@@ -22,6 +23,13 @@ function getRoleLabel(slot) {
 
 function getRoleIcon(slot) {
   return slot.startsWith('artist') ? <Mic size={14} /> : <Gavel size={14} />;
+}
+
+function timestampToMs(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  return 0;
 }
 
 function Arena() {
@@ -63,6 +71,10 @@ function Arena() {
     () => participants.find((participant) => participant.uid === user?.uid) || null,
     [participants, user?.uid],
   );
+  const participantsByUid = useMemo(
+    () => new Map(participants.map((participant) => [participant.uid, participant])),
+    [participants],
+  );
 
   const artists = useMemo(
     () => ['artistA', 'artistB'].map((slot) => participants.find((participant) => participant.role === slot)).filter(Boolean),
@@ -73,10 +85,29 @@ function Arena() {
     [participants]
   );
   const spectators = useMemo(() => participants.filter((participant) => participant.role === 'spectator'), [participants]);
-  const participantsBySlot = useMemo(
-    () => SLOT_ORDER.map((slot) => participants.find((participant) => participant.role === slot) || null),
-    [participants],
-  );
+  const participantsBySlot = useMemo(() => {
+    const seenUsers = new Set();
+
+    return SLOT_ORDER.map((slot) => {
+      const assignedUid = battle?.[slot];
+      if (!assignedUid || seenUsers.has(assignedUid)) {
+        return null;
+      }
+
+      const participant = participantsByUid.get(assignedUid) || null;
+      if (!participant) {
+        return null;
+      }
+
+      const lastSeenMs = timestampToMs(participant.lastSeenAt || participant.updatedAt || participant.joinedAt);
+      if (!lastSeenMs || Date.now() - lastSeenMs > PARTICIPANT_STALE_MS) {
+        return null;
+      }
+
+      seenUsers.add(assignedUid);
+      return participant;
+    });
+  }, [battle, participantsByUid]);
   const isSessionOwner = !currentUserParticipant?.sessionId || currentUserParticipant.sessionId === localSessionId;
 
   useEffect(() => {
@@ -148,6 +179,33 @@ function Arena() {
       disposed = true;
     };
   }, [battle, currentUserParticipant?.role, isSessionOwner, liveKitRoom, user, user?.displayName, user?.uid, userProfile?.displayName, userRole]);
+
+  useEffect(() => {
+    if (!battle?.id) return;
+
+    const assigned = SLOT_ORDER.map((slot) => battle[slot]).filter(Boolean);
+    if (new Set(assigned).size === assigned.length) return;
+
+    battleService.sanitizeRequiredSlots(battle.id, battle).catch((error) => {
+      console.error('Failed to sanitize arena slots:', error);
+    });
+  }, [battle]);
+
+  useEffect(() => {
+    if (!battleId || !user?.uid || !isSessionOwner) return undefined;
+
+    battleService.updateParticipantPresence(battleId, user.uid, localSessionId).catch((error) => {
+      console.error('Failed to update arena presence:', error);
+    });
+
+    const interval = setInterval(() => {
+      battleService.updateParticipantPresence(battleId, user.uid, localSessionId).catch((error) => {
+        console.error('Failed to refresh arena presence:', error);
+      });
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [battleId, isSessionOwner, localSessionId, user?.uid]);
 
   useEffect(() => {
     if (!currentUserParticipant?.sessionId || currentUserParticipant.sessionId === localSessionId) {
