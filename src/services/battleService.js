@@ -472,9 +472,7 @@ export const battleService = {
       const battle = { id: docSnap.id, ...docSnap.data() };
       if (battle.isCustom) return;
       if (battleIncludesUser(battle, userId)) return;
-      if (getOpenSlot(battle, RANDOM_ROLE_SLOT_ORDER[role] || [])) {
-        candidates.push(battle);
-      }
+      candidates.push(battle);
     });
 
     candidates.sort((left, right) => {

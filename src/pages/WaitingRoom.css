@@ -592,6 +592,19 @@
   color: rgba(255,255,255,0.52);
 }
 
+.section-jump-btn {
+  min-width: 180px;
+  justify-content: center;
+}
+
+.back-to-stage-btn {
+  min-width: 170px;
+}
+
+.mobile-stage-actions {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .waiting-header,
   .room-debug-strip,
@@ -600,11 +613,9 @@
   }
 
   .waiting-content {
-    height: 100%;
-    min-height: 0;
-    grid-template-rows: minmax(0, 1fr) minmax(0, 0.92fr);
+    display: grid;
     gap: 0.45rem;
-    overflow: hidden;
+    min-height: max-content;
   }
 
   .waiting-room {
@@ -617,7 +628,10 @@
     padding: 0.35rem;
     gap: 0.45rem;
     box-sizing: border-box;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
   }
 
   .waiting-header,
@@ -664,39 +678,50 @@
   }
 
   .video-section {
-    padding: 0.85rem;
+    min-height: calc(100dvh - 5.85rem);
+    padding: 0.95rem;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
     overflow: hidden;
     background:
-      radial-gradient(circle at top, rgba(230, 57, 70, 0.16), transparent 38%),
+      radial-gradient(circle at top, rgba(230, 57, 70, 0.16), transparent 42%),
       linear-gradient(180deg, rgba(18, 18, 18, 0.98), rgba(10, 10, 10, 0.98));
+    scroll-snap-align: start;
   }
 
   .section-title {
-    margin-bottom: 0.55rem;
-    font-size: 0.92rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.98rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, 0.84);
   }
 
   .battle-room-header {
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.7rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .battle-room-subtitle {
-    font-size: 0.72rem;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.58);
   }
 
   .battle-room-warning {
-    padding: 0.7rem 0.8rem;
-    margin-bottom: 0.65rem;
+    padding: 0.8rem 0.9rem;
+    margin-bottom: 0.8rem;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(110, 32, 32, 0.5), rgba(71, 19, 19, 0.34));
+    border: 1px solid rgba(255, 120, 120, 0.22);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
   }
 
   .battle-room-warning span {
     font-size: 0.72rem;
+    color: rgba(255, 220, 220, 0.82);
   }
 
   .track-upload-panel {
@@ -707,107 +732,148 @@
   }
 
   .video-box {
-    aspect-ratio: 1;
-    border-radius: 50%;
-    width: min(100%, 72px);
-    max-width: 72px;
-    justify-self: center;
-    border: 2px solid rgba(230, 57, 70, 0.22);
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.03), 0 18px 35px rgba(0, 0, 0, 0.34);
+    aspect-ratio: 1 / 1;
+    min-height: 92px;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 100%;
+    justify-self: stretch;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      radial-gradient(circle at top, rgba(230, 57, 70, 0.14), transparent 60%),
+      linear-gradient(180deg, rgba(24, 24, 28, 0.96), rgba(10, 10, 12, 0.96));
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+    transform: none;
   }
 
   .video-box.has-participant {
-    animation: liveRingPulse 2.1s ease-in-out infinite;
+    animation: none;
   }
 
   .video-box.has-participant.active {
     box-shadow:
-      0 0 0 4px rgba(255, 255, 255, 0.04),
-      0 10px 20px rgba(0, 0, 0, 0.34),
-      0 0 28px rgba(230, 57, 70, 0.34);
+      inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+      0 10px 18px rgba(0, 0, 0, 0.24),
+      0 0 8px rgba(230, 57, 70, 0.14);
+    transform: none;
   }
 
   .video-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.55rem 0.4rem;
-    margin-bottom: 0.35rem;
-    height: 100%;
+    gap: 0.9rem;
+    margin-bottom: 0.55rem;
+    flex: 1;
     min-height: 0;
-    justify-items: center;
+    justify-items: stretch;
     align-content: start;
+    padding-top: 0.1rem;
+    overflow: hidden;
+    padding-inline: 0.1rem;
+  }
+
+  .mobile-stage-actions {
+    display: flex;
+    justify-content: center;
     padding-top: 0.15rem;
   }
 
   .video-overlay {
-    padding: 0.45rem;
-    justify-content: flex-start;
-    align-items: center;
-    background: linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.76));
+    padding: 0.55rem;
+    justify-content: space-between;
+    align-items: stretch;
+    background: linear-gradient(180deg, rgba(0,0,0,0.04), rgba(0,0,0,0.78));
   }
 
   .role-badge-small {
-    display: none;
-  }
-
-  .participant-info {
-    gap: 0.2rem;
-  }
-
-  .participant-name {
-    font-size: 0.56rem;
-    line-height: 1.15;
-    max-width: 76%;
-    padding: 0.16rem 0.28rem;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.46);
-    backdrop-filter: blur(10px);
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 0.24rem 0.48rem;
+    font-size: 0.5rem;
+    letter-spacing: 0.12em;
+    max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    position: absolute;
-    top: 4px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 2;
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  }
+
+  .participant-info {
+    gap: 0.35rem;
+    align-items: flex-start;
+  }
+
+  .participant-name {
+    font-size: 0.62rem;
+    line-height: 1.2;
+    max-width: 100%;
+    padding: 0;
+    background: none;
+    backdrop-filter: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: static;
+    transform: none;
+    box-shadow: none;
+    text-align: left;
   }
 
   .avatar-placeholder {
     width: 34px;
     height: 34px;
-    border-radius: 50%;
-    font-size: 0.72rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
   }
 
   .empty-slot {
-    gap: 0.45rem;
+    gap: 0.55rem;
+    padding: 0.6rem;
   }
 
   .empty-slot span {
-    font-size: 0.58rem;
-    max-width: 80%;
+    font-size: 0.62rem;
+    max-width: 90%;
     text-align: center;
+    line-height: 1.35;
+    color: rgba(255,255,255,0.48);
+  }
+
+  .media-indicators {
+    top: auto;
+    right: 0.65rem;
+    bottom: 0.65rem;
+    gap: 0.28rem;
+  }
+
+  .media-indicators svg {
+    width: 13px;
+    height: 13px;
   }
 
   .media-controls {
-    gap: 0.6rem;
-    margin-top: 0.35rem;
+    gap: 0.75rem;
+    margin-top: 0;
     flex-wrap: nowrap;
+    justify-content: center;
+    padding: 0.6rem 0 0;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
   }
 
   .control-btn {
     width: 42px;
     height: 42px;
     flex-shrink: 0;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
   }
 
   .chat-section {
-    min-height: 0;
-    height: 100%;
+    min-height: calc(100dvh - 5.85rem);
+    height: calc(100dvh - 5.85rem);
     border-radius: 26px 26px 0 0;
     background: linear-gradient(180deg, rgba(18, 18, 18, 0.98), rgba(10, 10, 10, 0.98));
     box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.26), 0 18px 40px rgba(0, 0, 0, 0.24);
     overflow: hidden;
+    scroll-snap-align: start;
   }
 
   .chat-header {
@@ -819,6 +885,10 @@
 
   .chat-header p {
     font-size: 0.7rem;
+  }
+
+  .chat-header .section-jump-btn {
+    margin-top: 0.15rem;
   }
 
   .chat-header::before {

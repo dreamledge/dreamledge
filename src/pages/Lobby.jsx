@@ -38,7 +38,7 @@ function Lobby() {
       if (matchedRoom) {
         setUserRole(matchedRoom.role || 'artist');
         setIsHost(false);
-        navigate(`/waiting/${matchedRoom.battleId}`);
+        navigate(`/arena/${matchedRoom.battleId}`);
         return;
       }
 
@@ -47,7 +47,7 @@ function Lobby() {
       });
       setUserRole('artist');
       setIsHost(true);
-      navigate(`/waiting/${battleId}`);
+      navigate(`/arena/${battleId}`);
     } catch (error) {
       console.error('Match error:', error);
       alert('Error creating room: ' + error.message);
@@ -72,7 +72,7 @@ function Lobby() {
         );
         setUserRole(role);
         setIsHost(true);
-        navigate(`/waiting/${battleId}`);
+        navigate(`/arena/${battleId}`);
       } else if (role === 'judge') {
         await battleService.leaveAllUserBattles(user.uid);
 
@@ -80,7 +80,7 @@ function Lobby() {
         if (matchedRoom) {
           setUserRole(matchedRoom.role || 'judge');
           setIsHost(false);
-          navigate(`/waiting/${matchedRoom.battleId}`);
+          navigate(`/arena/${matchedRoom.battleId}`);
           return;
         }
 
@@ -89,7 +89,7 @@ function Lobby() {
         });
         setUserRole('judge');
         setIsHost(true);
-        navigate(`/waiting/${battleId}`);
+        navigate(`/arena/${battleId}`);
       } else if (role === 'spectator') {
         await battleService.leaveAllUserBattles(user.uid);
         const match = await battleService.findSpectatorMatch(user.uid, username, userProfile?.photoURL || '');
@@ -99,7 +99,7 @@ function Lobby() {
         }
         setUserRole(role);
         setIsHost(false);
-        navigate(`/waiting/${match.battleId}`);
+        navigate(`/arena/${match.battleId}`);
       }
     } catch (error) {
       console.error('Role select error:', error);
@@ -117,7 +117,7 @@ function Lobby() {
       await battleService.joinWaitingRoom(room.id, user.uid, username, 'spectator', userProfile?.photoURL || '');
       setUserRole('spectator');
       setIsHost(false);
-      navigate(`/waiting/${room.id}`);
+      navigate(`/arena/${room.id}`);
     } catch (error) {
       console.error('Join error:', error);
       alert(error.message || 'Failed to join room');
@@ -134,7 +134,7 @@ function Lobby() {
       const result = await battleService.joinByCode(roomCode.toUpperCase(), user.uid, username, userProfile?.photoURL || '');
       setUserRole(result.role);
       setIsHost(false);
-      navigate(`/waiting/${result.battleId}`);
+      navigate(`/arena/${result.battleId}`);
     } catch (error) {
       console.error('Join error:', error);
       alert(error.message || 'Room not found');

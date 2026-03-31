@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useAuthStore } from './stores/appStore';
 import { observeAuthState } from './services/firebase';
 import { userService } from './services/userService';
@@ -10,7 +10,6 @@ import Arena from './pages/Arena';
 import Profile from './pages/Profile';
 import Messages from './pages/Messages';
 import Leaderboard from './pages/Leaderboard';
-import WaitingRoom from './pages/WaitingRoom';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -31,6 +30,11 @@ function ScrollToTop() {
   }, [pathname]);
 
   return null;
+}
+
+function WaitingRoomRedirect() {
+  const { roomId } = useParams();
+  return <Navigate to={`/arena/${roomId}`} replace />;
 }
 
 function App() {
@@ -98,11 +102,7 @@ function App() {
                 <Lobby />
               </ProtectedRoute>
             } />
-            <Route path="/waiting/:roomId" element={
-              <ProtectedRoute>
-                <WaitingRoom />
-              </ProtectedRoute>
-            } />
+            <Route path="/waiting/:roomId" element={<WaitingRoomRedirect />} />
             <Route path="/arena/:battleId" element={
               <ProtectedRoute>
                 <Arena />

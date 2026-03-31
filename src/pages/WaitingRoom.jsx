@@ -42,6 +42,8 @@ function WaitingRoom() {
   const [phaseRemainingMs, setPhaseRemainingMs] = useState(0);
   const [countdownMessages, setCountdownMessages] = useState([]);
   const chatMessagesRef = useRef(null);
+  const stageSectionRef = useRef(null);
+  const chatSectionRef = useRef(null);
   const announcedThresholdsRef = useRef(new Set());
 
   const currentUserParticipant = useMemo(
@@ -349,6 +351,10 @@ function WaitingRoom() {
     navigate('/lobby');
   };
 
+  const scrollToSection = (sectionRef) => {
+    sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   useEffect(() => {
     if (!roomId || !user?.uid) return undefined;
 
@@ -434,7 +440,7 @@ function WaitingRoom() {
         </header>
 
         <div className="waiting-content">
-          <section className="video-section">
+          <section className="video-section waiting-stage-section" ref={stageSectionRef}>
             <div className="battle-room-header">
               <div>
                 <h2 className="section-title">Battle Room</h2>
@@ -497,6 +503,12 @@ function WaitingRoom() {
               ))}
             </div>
 
+            <div className="mobile-stage-actions">
+              <button type="button" className="btn btn-primary section-jump-btn" onClick={() => scrollToSection(chatSectionRef)}>
+                Open Chat
+              </button>
+            </div>
+
             <div className="media-controls" aria-label="Room controls">
               <button className={`control-btn ${micOn ? 'active' : 'off'}`} onClick={handleToggleMic}>
                 {micOn ? <MicOn size={20} /> : <MicOff size={20} />}
@@ -510,12 +522,15 @@ function WaitingRoom() {
             </div>
           </section>
 
-          <aside className="chat-section">
+          <aside className="chat-section waiting-chat-section" ref={chatSectionRef}>
             <div className="chat-header">
               <div className="chat-header-text">
                 <h3>Room Chat</h3>
                 <p>Live reactions and updates from everyone in the room.</p>
               </div>
+              <button type="button" className="btn btn-primary section-jump-btn back-to-stage-btn" onClick={() => scrollToSection(stageSectionRef)}>
+                Back To Battle
+              </button>
             </div>
             <div className="chat-messages" ref={chatMessagesRef}>
               {displayedMessages.map((msg) => (
