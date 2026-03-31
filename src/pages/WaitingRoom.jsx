@@ -499,6 +499,7 @@ function WaitingRoom() {
                   emptyLabel={`${roleLabel(SLOT_ORDER[index])} open`}
                   fallback={<Users size={32} />}
                   isLocal={participant?.uid === user?.uid}
+                  isSpeaking={!!getLiveParticipant(participant?.uid)?.isSpeaking}
                 />
               ))}
             </div>

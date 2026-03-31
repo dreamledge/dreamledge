@@ -39,11 +39,13 @@ export async function connectToLiveKitRoom({ roomName, identity, displayName, ro
   });
 
   const emitParticipants = () => {
+    const activeSpeakerIds = new Set((room.activeSpeakers || []).map((speaker) => speaker.identity));
     const participants = [room.localParticipant, ...Array.from(room.remoteParticipants.values())].map((participant) => ({
       identity: participant.identity,
       name: participant.name || participant.identity,
       isMicrophoneEnabled: participant.isMicrophoneEnabled,
       isCameraEnabled: participant.isCameraEnabled,
+      isSpeaking: activeSpeakerIds.has(participant.identity) || !!participant.isSpeaking,
       participant,
     }));
     onParticipantsChanged?.(participants);
@@ -57,6 +59,7 @@ export async function connectToLiveKitRoom({ roomName, identity, displayName, ro
   room.on(RoomEvent.TrackUnmuted, emitParticipants);
   room.on(RoomEvent.TrackSubscribed, emitParticipants);
   room.on(RoomEvent.TrackUnsubscribed, emitParticipants);
+  room.on(RoomEvent.ActiveSpeakersChanged, emitParticipants);
 
   await room.connect(LIVEKIT_URL, token);
   emitParticipants();

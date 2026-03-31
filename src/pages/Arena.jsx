@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore, useBattleStore, useUIStore } from '../stores/appStore';
 import { battleService } from '../services/battleService';
+import { getBattleSessionId } from '../services/battleSession';
 import { connectToLiveKitRoom, disconnectFromLiveKitRoom, getRoomMediaDiagnostics, setLiveKitMediaEnabled } from '../services/livekitService';
 import { Mic, Gavel, Users, Send, X, Video, VideoOff, MicOff, Timer, Volume2, Play, Pause, Heart } from 'lucide-react';
 import LiveMediaTile from '../components/LiveMediaTile';
@@ -9,6 +10,19 @@ import GifPicker from '../components/GifPicker';
 import './Arena.css';
 
 const COUNTDOWN_THRESHOLDS = [30, 10, 5, 4, 3, 2, 1];
+const SLOT_ORDER = ['artistA', 'artistB', 'judge1', 'judge2'];
+
+function getRoleLabel(slot) {
+  if (slot === 'artistA') return 'Artist 1';
+  if (slot === 'artistB') return 'Artist 2';
+  if (slot === 'judge1') return 'Judge 1';
+  if (slot === 'judge2') return 'Judge 2';
+  return 'Open';
+}
+
+function getRoleIcon(slot) {
+  return slot.startsWith('artist') ? <Mic size={14} /> : <Gavel size={14} />;
+}
 
 function Arena() {
   const { battleId } = useParams();
@@ -43,6 +57,7 @@ function Arena() {
   const stageSectionRef = useRef(null);
   const chatSectionRef = useRef(null);
   const announcedThresholdsRef = useRef(new Set());
+  const localSessionId = useMemo(() => getBattleSessionId(), []);
 
   const currentUserParticipant = useMemo(
     () => participants.find((participant) => participant.uid === user?.uid) || null,
@@ -58,6 +73,11 @@ function Arena() {
     [participants]
   );
   const spectators = useMemo(() => participants.filter((participant) => participant.role === 'spectator'), [participants]);
+  const participantsBySlot = useMemo(
+    () => SLOT_ORDER.map((slot) => participants.find((participant) => participant.role === slot) || null),
+    [participants],
+  );
+  const isSessionOwner = !currentUserParticipant?.sessionId || currentUserParticipant.sessionId === localSessionId;
 
   useEffect(() => {
     if (chatMessagesRef.current) {
@@ -100,7 +120,7 @@ function Arena() {
   }, [battleId, navigate, setBattlePhase, setCurrentBattle, setParticipants, setUserSlot, user?.uid]);
 
   useEffect(() => {
-    if (!battle || !user || liveKitRoom) return undefined;
+    if (!battle || !user || liveKitRoom || !isSessionOwner) return undefined;
 
     let disposed = false;
 
@@ -127,7 +147,20 @@ function Arena() {
     return () => {
       disposed = true;
     };
-  }, [battle, currentUserParticipant?.role, liveKitRoom, user, user?.displayName, user?.uid, userProfile?.displayName, userRole]);
+  }, [battle, currentUserParticipant?.role, isSessionOwner, liveKitRoom, user, user?.displayName, user?.uid, userProfile?.displayName, userRole]);
+
+  useEffect(() => {
+    if (!currentUserParticipant?.sessionId || currentUserParticipant.sessionId === localSessionId) {
+      return;
+    }
+
+    if (liveKitRoom) {
+      disconnectFromLiveKitRoom(liveKitRoom);
+      setLiveKitRoom(null);
+    }
+
+    navigate('/lobby', { replace: true });
+  }, [currentUserParticipant?.sessionId, liveKitRoom, localSessionId, navigate]);
 
   useEffect(() => {
     let mounted = true;
@@ -363,6 +396,7 @@ function Arena() {
     if (!battleId || !user?.uid) return undefined;
 
     const handlePageHide = () => {
+      if (!isSessionOwner) return;
       battleService.leaveWaitingRoom(battleId, user.uid).catch((error) => {
         console.error('Arena page hide leave error:', error);
       });
@@ -380,7 +414,7 @@ function Arena() {
       window.removeEventListener('pagehide', handlePageHide);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [battleId, user?.uid]);
+  }, [battleId, isSessionOwner, user?.uid]);
 
   if (!battle) {
     return (
@@ -414,57 +448,52 @@ function Arena() {
               <div className="debug-pill"><span>In Room</span><strong>{mediaDiagnostics.participantCount}</strong></div>
             </div>
             <div className="video-grid">
-              {artists.map((artist) => (
-                <div
-                  key={artist.uid}
-                  className={`arena-tile artist-tile ${currentTurnSlot === artist.role ? 'active' : ''}`}
-                >
-                  <LiveMediaTile
-                    participant={artist}
-                    liveParticipant={getLiveParticipant(artist.uid)}
-                    roleBadgeClass="badge-artist"
-                    roleLabel={<><Mic size={14} /> {artist.role}</>}
-                    emptyLabel="artist"
-                    fallback={<Mic size={32} />}
-                    className={currentTurnSlot === artist.role ? 'active' : ''}
-                    isLocal={artist.uid === user?.uid}
-                  />
-                  <button
-                    type="button"
-                    className="vote-artist-btn"
-                    onClick={() => handleVote(artist.role)}
-                    disabled={battle.status !== 'voting' || submittingVote}
-                  >
-                    <div className="video-info">
-                      <span className="artist-name">{artist.displayName}</span>
-                      <div className="artist-stats">
-                        <span className="vote-count">
-                          <Heart size={14} />
-                          {voteCounts[artist.role] || 0}
-                        </span>
-                        {currentTurnSlot === artist.role && isPlaying && <span className="playing-indicator">Playing</span>}
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              ))}
+              {participantsBySlot.map((participant, index) => {
+                const slot = SLOT_ORDER[index];
+                const isArtistSlot = slot.startsWith('artist');
+                const isActiveSlot = currentTurnSlot === slot;
 
-              {judges.map((judge) => (
-                <div key={judge.uid} className="arena-tile judge-tile">
-                  <LiveMediaTile
-                    participant={judge}
-                    liveParticipant={getLiveParticipant(judge.uid)}
-                    roleBadgeClass="badge-judge"
-                    roleLabel={<><Gavel size={14} /> {judge.role}</>}
-                    emptyLabel="judge"
-                    fallback={<Gavel size={32} />}
-                    isLocal={judge.uid === user?.uid}
-                  />
-                  <div className="video-info">
-                    <span className="artist-name">{judge.displayName}</span>
+                return (
+                  <div
+                    key={slot}
+                    className={`arena-tile ${isArtistSlot ? 'artist-tile' : 'judge-tile'} ${isActiveSlot ? 'active' : ''}`}
+                  >
+                    <LiveMediaTile
+                      participant={participant}
+                      liveParticipant={participant ? getLiveParticipant(participant.uid) : null}
+                      roleBadgeClass={isArtistSlot ? 'badge-artist' : 'badge-judge'}
+                      roleLabel={<>{getRoleIcon(slot)} {getRoleLabel(slot)}</>}
+                      emptyLabel={`${getRoleLabel(slot)} open`}
+                      fallback={isArtistSlot ? <Mic size={32} /> : <Gavel size={32} />}
+                      className={isActiveSlot ? 'active' : ''}
+                      isLocal={participant?.uid === user?.uid}
+                      slotLabel={getRoleLabel(slot)}
+                      nameOverride={participant?.displayName || ''}
+                      isSpeaking={!!getLiveParticipant(participant?.uid)?.isSpeaking}
+                    />
+
+                    {participant && isArtistSlot && (
+                      <button
+                        type="button"
+                        className="vote-artist-btn"
+                        onClick={() => handleVote(slot)}
+                        disabled={battle.status !== 'voting' || submittingVote}
+                      >
+                        <div className="video-info">
+                          <span className="artist-name">{participant.displayName}</span>
+                          <div className="artist-stats">
+                            <span className="vote-count">
+                              <Heart size={14} />
+                              {voteCounts[slot] || 0}
+                            </span>
+                            {isActiveSlot && isPlaying && <span className="playing-indicator">Playing</span>}
+                          </div>
+                        </div>
+                      </button>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mobile-stage-actions">

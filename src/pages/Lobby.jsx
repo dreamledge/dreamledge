@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore, useBattleStore } from '../stores/appStore';
 import { battleService } from '../services/battleService';
+import { getBattleSessionId } from '../services/battleSession';
 import { Swords, User, Users, Plus, Shuffle, Copy, Check, Search } from 'lucide-react';
 import './Lobby.css';
 
@@ -13,6 +14,7 @@ function Lobby() {
   const [copied, setCopied] = useState(false);
   const [activeRooms, setActiveRooms] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const sessionId = getBattleSessionId();
 
   const username = userProfile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'Anonymous';
 
@@ -34,7 +36,7 @@ function Lobby() {
     try {
       await battleService.leaveAllUserBattles(user.uid);
 
-      const matchedRoom = await battleService.findMatch('artist', user.uid, username, userProfile?.photoURL || '');
+      const matchedRoom = await battleService.findMatch('artist', user.uid, username, userProfile?.photoURL || '', sessionId);
       if (matchedRoom) {
         setUserRole(matchedRoom.role || 'artist');
         setIsHost(false);
@@ -44,6 +46,7 @@ function Lobby() {
 
       const battleId = await battleService.createWaitingRoom('Random Artists', user.uid, username, 'artist', {
         photoURL: userProfile?.photoURL || '',
+        sessionId,
       });
       setUserRole('artist');
       setIsHost(true);
@@ -68,7 +71,7 @@ function Lobby() {
           user.uid,
           username,
           'artist',
-          { visibility: 'private', photoURL: userProfile?.photoURL || '' }
+          { visibility: 'private', photoURL: userProfile?.photoURL || '', sessionId }
         );
         setUserRole(role);
         setIsHost(true);
@@ -76,7 +79,7 @@ function Lobby() {
       } else if (role === 'judge') {
         await battleService.leaveAllUserBattles(user.uid);
 
-        const matchedRoom = await battleService.findMatch('judge', user.uid, username, userProfile?.photoURL || '');
+        const matchedRoom = await battleService.findMatch('judge', user.uid, username, userProfile?.photoURL || '', sessionId);
         if (matchedRoom) {
           setUserRole(matchedRoom.role || 'judge');
           setIsHost(false);
@@ -86,13 +89,14 @@ function Lobby() {
 
         const battleId = await battleService.createWaitingRoom('Judge Queue', user.uid, username, 'judge', {
           photoURL: userProfile?.photoURL || '',
+          sessionId,
         });
         setUserRole('judge');
         setIsHost(true);
         navigate(`/arena/${battleId}`);
       } else if (role === 'spectator') {
         await battleService.leaveAllUserBattles(user.uid);
-        const match = await battleService.findSpectatorMatch(user.uid, username, userProfile?.photoURL || '');
+        const match = await battleService.findSpectatorMatch(user.uid, username, userProfile?.photoURL || '', sessionId);
         if (!match) {
           alert('No battles are open for spectators yet.');
           return;
@@ -114,7 +118,7 @@ function Lobby() {
     }
     
     try {
-      await battleService.joinWaitingRoom(room.id, user.uid, username, 'spectator', userProfile?.photoURL || '');
+      await battleService.joinWaitingRoom(room.id, user.uid, username, 'spectator', userProfile?.photoURL || '', sessionId);
       setUserRole('spectator');
       setIsHost(false);
       navigate(`/arena/${room.id}`);
@@ -131,7 +135,7 @@ function Lobby() {
     }
     
     try {
-      const result = await battleService.joinByCode(roomCode.toUpperCase(), user.uid, username, userProfile?.photoURL || '');
+      const result = await battleService.joinByCode(roomCode.toUpperCase(), user.uid, username, userProfile?.photoURL || '', sessionId);
       setUserRole(result.role);
       setIsHost(false);
       navigate(`/arena/${result.battleId}`);

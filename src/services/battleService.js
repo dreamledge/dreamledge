@@ -93,12 +93,13 @@ function defaultBattleData({ createdBy, createdByName, isCustom, roomCode }) {
   };
 }
 
-function buildParticipant({ uid, role, displayName, photoURL }) {
+function buildParticipant({ uid, role, displayName, photoURL, sessionId }) {
   return {
     uid,
     role,
     displayName,
     photoURL: photoURL || '',
+    sessionId: sessionId || '',
     isMicOn: true,
     isCameraOn: true,
     joinedAt: serverTimestamp(),
@@ -204,7 +205,7 @@ async function addSystemMessage(battleId, message, type = 'system') {
   }
 }
 
-async function assignSlotAndJoin({ battleId, uid, displayName, photoURL, slotPreference }) {
+async function assignSlotAndJoin({ battleId, uid, displayName, photoURL, slotPreference, sessionId }) {
   const resolved = await runTransaction(db, async (transaction) => {
     const battleRef = battleDoc(battleId);
     const participantRef = participantDoc(battleId, uid);
@@ -231,6 +232,16 @@ async function assignSlotAndJoin({ battleId, uid, displayName, photoURL, slotPre
 
     if (!assignedSlot && participantSnap.exists()) {
       const existingParticipant = participantSnap.data();
+      transaction.set(
+        participantRef,
+        {
+          displayName,
+          photoURL: photoURL || '',
+          sessionId: sessionId || '',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
       return {
         battleId,
         role: existingParticipant.role,
@@ -272,6 +283,7 @@ async function assignSlotAndJoin({ battleId, uid, displayName, photoURL, slotPre
         role,
         displayName,
         photoURL,
+        sessionId,
       }),
       { merge: true },
     );
@@ -456,6 +468,7 @@ export const battleService = {
         role: initialSlot || 'spectator',
         displayName: hostUsername,
         photoURL: options.photoURL,
+        sessionId: options.sessionId,
       }),
       { merge: true },
     );
@@ -463,7 +476,7 @@ export const battleService = {
     return battleRef.id;
   },
 
-  async findMatch(role, userId, displayName, photoURL) {
+  async findMatch(role, userId, displayName, photoURL, sessionId = '') {
     await ensureFirebaseSession();
     const battleQuery = query(battlesCollection(), where('status', '==', 'waiting'));
     const snapshot = await getDocs(battleQuery);
@@ -491,6 +504,7 @@ export const battleService = {
       displayName,
       photoURL,
       slotPreference: RANDOM_ROLE_SLOT_ORDER[role],
+      sessionId,
     });
   },
 
@@ -535,7 +549,7 @@ export const battleService = {
     await Promise.all(relevantBattles.map((battle) => battleService.leaveWaitingRoom(battle.id, userId)));
   },
 
-  async joinWaitingRoom(battleId, userId, displayName, role = 'artist', photoURL = '') {
+  async joinWaitingRoom(battleId, userId, displayName, role = 'artist', photoURL = '', sessionId = '') {
     await ensureFirebaseSession();
     const slotPreference = role === 'spectator' ? [] : RANDOM_ROLE_SLOT_ORDER[role] || [];
     return assignSlotAndJoin({
@@ -544,10 +558,11 @@ export const battleService = {
       displayName,
       photoURL,
       slotPreference,
+      sessionId,
     });
   },
 
-  async joinByCode(roomCode, userId, displayName, photoURL = '') {
+  async joinByCode(roomCode, userId, displayName, photoURL = '', sessionId = '') {
     await ensureFirebaseSession();
     const roomQuery = query(battlesCollection(), where('roomCode', '==', roomCode));
     const snapshot = await getDocs(roomQuery);
@@ -562,10 +577,11 @@ export const battleService = {
       displayName,
       photoURL,
       slotPreference: JOIN_BY_CODE_SLOT_ORDER,
+      sessionId,
     });
   },
 
-  async findSpectatorMatch(userId, displayName, photoURL = '') {
+  async findSpectatorMatch(userId, displayName, photoURL = '', sessionId = '') {
     await ensureFirebaseSession();
     const battleQuery = query(battlesCollection(), where('status', 'in', ['waiting', 'selection', 'active', 'voting', 'overtime', 'finished']));
     const snapshot = await getDocs(battleQuery);
@@ -590,7 +606,7 @@ export const battleService = {
     const battle = candidates[0];
     await setDoc(
       participantDoc(battle.id, userId),
-      buildParticipant({ uid: userId, role: 'spectator', displayName, photoURL }),
+      buildParticipant({ uid: userId, role: 'spectator', displayName, photoURL, sessionId }),
       { merge: true },
     );
 
