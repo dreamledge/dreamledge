@@ -3,9 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore, useBattleStore, useUIStore } from '../stores/appStore';
 import { battleService } from '../services/battleService';
 import { getBattleSessionId } from '../services/battleSession';
-import { connectToLiveKitRoom, disconnectFromLiveKitRoom, getRoomMediaDiagnostics, setLiveKitMediaEnabled } from '../services/livekitService';
-import { Mic, Gavel, Users, Copy, Check, Send, X, Video, VideoOff, MicOff, Mic as MicOn } from 'lucide-react';
-import LiveMediaTile from '../components/LiveMediaTile';
+import { Mic, Gavel, Users, Copy, Check, Send } from 'lucide-react';
+import JitsiBattleStage from '../components/JitsiBattleStage';
 import GifPicker from '../components/GifPicker';
 import './WaitingRoom.css';
 
@@ -35,19 +34,8 @@ function WaitingRoom() {
   const [cameraOn, setCameraOn] = useState(true);
   const [micOn, setMicOn] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
-  const [liveKitRoom, setLiveKitRoom] = useState(null);
-  const [liveKitError, setLiveKitError] = useState('');
-  const [permissionState, setPermissionState] = useState({ camera: 'unknown', microphone: 'unknown' });
-  const [mediaDiagnostics, setMediaDiagnostics] = useState({
-    isConnected: false,
-    participantCount: 0,
-    remoteCount: 0,
-    localCameraPublished: false,
-    localMicPublished: false,
-  });
   const [trackFile, setTrackFile] = useState(null);
   const [isSubmittingTrack, setIsSubmittingTrack] = useState(false);
-  const [liveParticipants, setLiveParticipants] = useState([]);
   const [phaseRemainingMs, setPhaseRemainingMs] = useState(0);
   const [countdownMessages, setCountdownMessages] = useState([]);
   const chatMessagesRef = useRef(null);
@@ -94,11 +82,6 @@ function WaitingRoom() {
   const canStart = !!(battle?.artistA && battle?.artistB && battle?.judge1 && battle?.judge2);
   const myBattleRole = currentUserParticipant?.role || null;
   const isArtistRole = myBattleRole === 'artistA' || myBattleRole === 'artistB';
-  const mediaUnavailable = typeof navigator === 'undefined' || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function';
-  const roomWarning = mediaUnavailable
-    ? 'Camera and microphone are not available on this device or browser.'
-    : liveKitError;
-
   useEffect(() => {
     if (chatMessagesRef.current) {
       chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
@@ -151,36 +134,6 @@ function WaitingRoom() {
       unsubscribeMessages();
     };
   }, [navigate, roomId, setBattlePhase, setCurrentBattle, setParticipants, setUserSlot, user?.uid]);
-
-  useEffect(() => {
-    if (!battle || !user || liveKitRoom) return undefined;
-
-    let disposed = false;
-
-    connectToLiveKitRoom({
-      roomName: battle.livekitRoomName || battle.id,
-      identity: user.uid,
-      displayName: userProfile?.displayName || user.displayName || 'Anonymous',
-      role: currentUserParticipant?.role || userRole || 'spectator',
-      onParticipantsChanged: setLiveParticipants,
-    })
-      .then((room) => {
-        if (disposed) {
-          disconnectFromLiveKitRoom(room);
-          return;
-        }
-        setLiveKitRoom(room);
-        setLiveKitError('');
-      })
-      .catch((error) => {
-        console.error('LiveKit connection error:', error);
-        setLiveKitError(error.message || 'LiveKit unavailable');
-      });
-
-    return () => {
-      disposed = true;
-    };
-  }, [battle, currentUserParticipant?.role, liveKitRoom, user, user?.displayName, user?.uid, userProfile?.displayName, userRole]);
 
   useEffect(() => {
     if (!battle?.id) return;
@@ -249,70 +202,6 @@ function WaitingRoom() {
     ]);
   }, [battle?.status, phaseRemainingMs]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const checkPermissions = async () => {
-      if (!navigator.permissions?.query) return;
-
-      try {
-        const [cameraPermission, microphonePermission] = await Promise.allSettled([
-          navigator.permissions.query({ name: 'camera' }),
-          navigator.permissions.query({ name: 'microphone' }),
-        ]);
-
-        if (!mounted) return;
-
-        setPermissionState({
-          camera: cameraPermission.status === 'fulfilled' ? cameraPermission.value.state : 'unknown',
-          microphone: microphonePermission.status === 'fulfilled' ? microphonePermission.value.state : 'unknown',
-        });
-      } catch (error) {
-        console.error('Permission query error:', error);
-      }
-    };
-
-    checkPermissions();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!liveKitRoom) return;
-    setLiveKitMediaEnabled(liveKitRoom, { microphone: micOn, camera: cameraOn }).catch((error) => {
-      console.error('Initial waiting room media sync error:', error);
-      setLiveKitError(error.message || 'Could not enable camera/mic');
-    });
-  }, [liveKitRoom, micOn, cameraOn]);
-
-  useEffect(() => {
-    if (!liveKitRoom) {
-      setMediaDiagnostics({
-        isConnected: false,
-        participantCount: 0,
-        remoteCount: 0,
-        localCameraPublished: false,
-        localMicPublished: false,
-      });
-      return undefined;
-    }
-
-    const updateDiagnostics = () => {
-      setMediaDiagnostics(getRoomMediaDiagnostics(liveKitRoom));
-    };
-
-    updateDiagnostics();
-    const interval = setInterval(updateDiagnostics, 1000);
-    return () => clearInterval(interval);
-  }, [liveKitRoom]);
-
-  useEffect(() => () => {
-    if (liveKitRoom) {
-      disconnectFromLiveKitRoom(liveKitRoom);
-    }
-  }, [liveKitRoom]);
-
   const syncMediaState = async (updates) => {
     if (!user?.uid || !roomId) return;
     await battleService.updateParticipantMediaState(roomId, user.uid, updates);
@@ -321,23 +210,13 @@ function WaitingRoom() {
   const handleToggleMic = async () => {
     const nextMicOn = !micOn;
     setMicOn(nextMicOn);
-    try {
-      await setLiveKitMediaEnabled(liveKitRoom, { microphone: nextMicOn });
-      await syncMediaState({ isMicOn: nextMicOn });
-    } catch (error) {
-      console.error('Mic toggle error:', error);
-    }
+    await syncMediaState({ isMicOn: nextMicOn });
   };
 
   const handleToggleCamera = async () => {
     const nextCameraOn = !cameraOn;
     setCameraOn(nextCameraOn);
-    try {
-      await setLiveKitMediaEnabled(liveKitRoom, { camera: nextCameraOn });
-      await syncMediaState({ isCameraOn: nextCameraOn });
-    } catch (error) {
-      console.error('Camera toggle error:', error);
-    }
+    await syncMediaState({ isCameraOn: nextCameraOn });
   };
 
   const handleCopyCode = () => {
@@ -409,9 +288,6 @@ function WaitingRoom() {
     if (user?.uid) {
       await battleService.leaveWaitingRoom(roomId, user.uid);
     }
-    if (liveKitRoom) {
-      disconnectFromLiveKitRoom(liveKitRoom);
-    }
     navigate('/lobby');
   };
 
@@ -420,33 +296,8 @@ function WaitingRoom() {
   };
 
   useEffect(() => {
-    if (!roomId || !user?.uid) return undefined;
-
-    const handlePageHide = () => {
-      battleService.leaveWaitingRoom(roomId, user.uid).catch((error) => {
-        console.error('Page hide leave error:', error);
-      });
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        handlePageHide();
-      }
-    };
-
-    window.addEventListener('pagehide', handlePageHide);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      window.removeEventListener('pagehide', handlePageHide);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [roomId, user?.uid]);
-
-  const getRoleIcon = (role) => {
-    if (role === 'artistA' || role === 'artistB') return <Mic size={14} />;
-    if (role === 'judge1' || role === 'judge2') return <Gavel size={14} />;
-    return <Users size={14} />;
-  };
+    return undefined;
+  }, []);
 
   const roleLabel = (role) => {
     if (role === 'artistA') return 'artist a';
@@ -456,7 +307,6 @@ function WaitingRoom() {
     return 'spectator';
   };
 
-  const getLiveParticipant = (uid) => liveParticipants.find((participant) => participant.identity === uid);
   const displayedMessages = [...chatMessages, ...countdownMessages];
 
   return (
@@ -500,20 +350,6 @@ function WaitingRoom() {
                 <p className="battle-room-subtitle">Artists, judges, and crowd all in one live room.</p>
               </div>
             </div>
-            {roomWarning && (
-              <div className="battle-room-warning" role="alert">
-                <strong>Device Warning</strong>
-                <span>{roomWarning}</span>
-              </div>
-            )}
-            <div className="room-debug-strip">
-              <div className="debug-pill"><span>LiveKit</span><strong>{mediaDiagnostics.isConnected ? 'connected' : 'disconnected'}</strong></div>
-              <div className="debug-pill"><span>Camera</span><strong>{permissionState.camera}</strong></div>
-              <div className="debug-pill"><span>Mic</span><strong>{permissionState.microphone}</strong></div>
-              <div className="debug-pill"><span>My Feed</span><strong>{mediaDiagnostics.localCameraPublished ? 'live' : cameraOn ? 'starting' : 'off'}</strong></div>
-              <div className="debug-pill"><span>My Mic</span><strong>{mediaDiagnostics.localMicPublished ? 'live' : micOn ? 'starting' : 'off'}</strong></div>
-              <div className="debug-pill"><span>In Room</span><strong>{mediaDiagnostics.participantCount}</strong></div>
-            </div>
             {battle?.status === 'selection' && (
               <div className="track-upload-panel">
                 <p className="start-hint">Artists upload tracks while the countdown updates in chat.</p>
@@ -541,21 +377,23 @@ function WaitingRoom() {
                 </p>
               </div>
             )}
-            <div className="video-grid">
-              {participantsBySlot.map((participant, index) => (
-                <LiveMediaTile
-                  key={SLOT_ORDER[index]}
-                  participant={participant}
-                  liveParticipant={participant ? getLiveParticipant(participant.uid) : null}
-                  roleBadgeClass={`badge-${participant?.role?.startsWith('artist') ? 'artist' : 'judge'}`}
-                  roleLabel={participant ? <>{getRoleIcon(participant.role)} {roleLabel(participant.role)}</> : ''}
-                  emptyLabel={`${roleLabel(SLOT_ORDER[index])} open`}
-                  fallback={<Users size={32} />}
-                  isLocal={participant?.uid === user?.uid}
-                  isSpeaking={!!getLiveParticipant(participant?.uid)?.isSpeaking}
-                />
-              ))}
-            </div>
+            <JitsiBattleStage
+              roomName={battle.livekitRoomName || battle.id}
+              displayName={userProfile?.displayName || user?.displayName || 'Anonymous'}
+              avatarUrl={userProfile?.photoURL || user?.photoURL || ''}
+              role={currentUserParticipant?.role || userRole || 'spectator'}
+              micOn={micOn}
+              cameraOn={cameraOn}
+              onMicChange={(nextMicOn) => {
+                setMicOn(nextMicOn);
+                syncMediaState({ isMicOn: nextMicOn });
+              }}
+              onCameraChange={(nextCameraOn) => {
+                setCameraOn(nextCameraOn);
+                syncMediaState({ isCameraOn: nextCameraOn });
+              }}
+              onLeave={handleLeaveRoom}
+            />
 
             <div className="mobile-stage-actions">
               <button type="button" className="btn btn-primary section-jump-btn" onClick={() => scrollToSection(chatSectionRef)}>
@@ -563,17 +401,6 @@ function WaitingRoom() {
               </button>
             </div>
 
-            <div className="media-controls" aria-label="Room controls">
-              <button className={`control-btn ${micOn ? 'active' : 'off'}`} onClick={handleToggleMic}>
-                {micOn ? <MicOn size={20} /> : <MicOff size={20} />}
-              </button>
-              <button className={`control-btn ${cameraOn ? 'active' : 'off'}`} onClick={handleToggleCamera}>
-                {cameraOn ? <Video size={20} /> : <VideoOff size={20} />}
-              </button>
-              <button className="control-btn leave" onClick={handleLeaveRoom}>
-                <X size={20} />
-              </button>
-            </div>
           </section>
 
           <aside className="chat-section waiting-chat-section" ref={chatSectionRef}>

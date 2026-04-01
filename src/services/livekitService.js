@@ -27,11 +27,15 @@ async function fetchToken({ roomName, identity, displayName, role }) {
   return data.token;
 }
 
-export async function connectToLiveKitRoom({ roomName, identity, displayName, role, onParticipantsChanged }) {
-  if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
-    throw new Error('Camera and microphone are not available on this device or browser.');
+function parseMetadata(participant) {
+  try {
+    return participant.metadata ? JSON.parse(participant.metadata) : {};
+  } catch {
+    return {};
   }
+}
 
+export async function connectToLiveKitRoom({ roomName, identity, displayName, role, onParticipantsChanged, onConnectionStateChanged }) {
   const token = await fetchToken({ roomName, identity, displayName, role });
   const room = new Room({
     adaptiveStream: true,
@@ -43,12 +47,17 @@ export async function connectToLiveKitRoom({ roomName, identity, displayName, ro
     const participants = [room.localParticipant, ...Array.from(room.remoteParticipants.values())].map((participant) => ({
       identity: participant.identity,
       name: participant.name || participant.identity,
-      isMicrophoneEnabled: participant.isMicrophoneEnabled,
-      isCameraEnabled: participant.isCameraEnabled,
+      ...parseMetadata(participant),
+      isMicOn: participant.isMicrophoneEnabled,
+      isCameraOn: participant.isCameraEnabled,
       isSpeaking: activeSpeakerIds.has(participant.identity) || !!participant.isSpeaking,
       participant,
     }));
     onParticipantsChanged?.(participants);
+  };
+
+  const emitConnection = () => {
+    onConnectionStateChanged?.(room.state, room);
   };
 
   room.on(RoomEvent.ParticipantConnected, emitParticipants);
@@ -60,8 +69,13 @@ export async function connectToLiveKitRoom({ roomName, identity, displayName, ro
   room.on(RoomEvent.TrackSubscribed, emitParticipants);
   room.on(RoomEvent.TrackUnsubscribed, emitParticipants);
   room.on(RoomEvent.ActiveSpeakersChanged, emitParticipants);
+  room.on(RoomEvent.ConnectionStateChanged, emitConnection);
+  room.on(RoomEvent.Reconnecting, emitConnection);
+  room.on(RoomEvent.Reconnected, emitConnection);
+  room.on(RoomEvent.Disconnected, emitConnection);
 
   await room.connect(LIVEKIT_URL, token);
+  emitConnection();
   emitParticipants();
   return room;
 }
