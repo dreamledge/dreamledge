@@ -69,4 +69,5 @@ export const ensureFirebaseSession = async () => {
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const rtdb = getDatabase(app);
+
 export default app;

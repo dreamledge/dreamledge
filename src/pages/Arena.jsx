@@ -14,6 +14,60 @@ const SLOT_ORDER = ['artistA', 'artistB', 'judge1', 'judge2'];
 const COUNTDOWN_THRESHOLDS = [30, 10, 5, 4, 3, 2, 1];
 const PARTICIPANT_STALE_MS = 45_000;
 
+function normalizeTurnSlot(turn) {
+  if (turn === 'overtimeA') return 'artistA';
+  if (turn === 'overtimeB') return 'artistB';
+  return turn || null;
+}
+
+function canRoleUseMicrophone(role, battle) {
+  if (!role || role === 'spectator' || !battle) return false;
+
+  if (battle.status === 'waiting' || battle.status === 'selection') {
+    return role === 'artistA' || role === 'artistB' || role === 'judge1' || role === 'judge2';
+  }
+
+  if (battle.status === 'active' || battle.status === 'overtime') {
+    return normalizeTurnSlot(battle.currentTurn) === role;
+  }
+
+  if (battle.status === 'voting') {
+    return role === 'judge1' || role === 'judge2';
+  }
+
+  return false;
+}
+
+function getMicLockedMessage(role, battle) {
+  if (!battle) return 'Microphone is unavailable until the live room is ready.';
+  if (role === 'judge1' || role === 'judge2') {
+    return battle.status === 'voting'
+      ? 'Judges can speak during judging.'
+      : 'Judges can only use the microphone during the judging phase.';
+  }
+
+  if (role === 'artistA' || role === 'artistB') {
+    if (battle.status === 'waiting' || battle.status === 'selection') {
+      return 'Artists and judges can use the microphone before the match starts.';
+    }
+
+    const activeTurn = normalizeTurnSlot(battle.currentTurn);
+    if (battle.status === 'active' || battle.status === 'overtime') {
+      return activeTurn === role
+        ? 'It is your turn to perform.'
+        : 'Only the current performer can use the microphone right now.';
+    }
+
+    return 'Artists can only use the microphone during their turn.';
+  }
+
+  if (battle.status === 'waiting' || battle.status === 'selection') {
+    return 'Only artists and judges can use the microphone before the match starts.';
+  }
+
+  return 'Microphone is locked for spectators.';
+}
+
 function timestampToMs(value) {
   if (!value) return 0;
   if (typeof value.toMillis === 'function') return value.toMillis();
@@ -34,6 +88,9 @@ function Arena() {
   const [newMessage, setNewMessage] = useState('');
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(false);
+  const [micPending, setMicPending] = useState(false);
+  const [cameraPending, setCameraPending] = useState(false);
+  const [mediaFeedback, setMediaFeedback] = useState('');
   const [phaseRemainingMs, setPhaseRemainingMs] = useState(0);
   const [submittingVote, setSubmittingVote] = useState(false);
   const [countdownMessages, setCountdownMessages] = useState([]);
@@ -68,11 +125,16 @@ function Arena() {
 
     return SLOT_ORDER.map((slot) => {
       const assignedUid = battle?.[slot];
-      if (!assignedUid || seenUsers.has(assignedUid)) {
+      let participant = assignedUid ? participantsByUid.get(assignedUid) || null : null;
+
+      if (!participant) {
+        participant = participants.find((entry) => entry.role === slot) || null;
+      }
+
+      if (!participant || seenUsers.has(participant.uid)) {
         return null;
       }
 
-      const participant = participantsByUid.get(assignedUid) || null;
       if (!participant) {
         return null;
       }
@@ -82,13 +144,16 @@ function Arena() {
         return null;
       }
 
-      seenUsers.add(assignedUid);
+      seenUsers.add(participant.uid);
       return participant;
     });
-  }, [battle, participantsByUid]);
+  }, [battle, participants, participantsByUid]);
 
+  const currentUserRole = currentUserParticipant?.role || userRole || 'spectator';
   const isSessionOwner = !currentUserParticipant?.sessionId || currentUserParticipant.sessionId === localSessionId;
-
+  const canUseMediaControls = ['artistA', 'artistB', 'judge1', 'judge2'].includes(currentUserRole);
+  const canSpeakNow = canRoleUseMicrophone(currentUserRole, battle);
+  const liveRoomName = battle?.livekitRoomName || battle?.id || '';
   const {
     participants: liveParticipants,
     status: connectionStatus,
@@ -97,10 +162,11 @@ function Arena() {
     toggleMicrophone,
     toggleCamera,
   } = useBattleRoomMedia({
-    roomName: battle ? `battle_${battle.id}` : '',
-    identity: user?.uid,
+    roomName: liveRoomName,
+    identity: user?.uid || '',
     displayName: userProfile?.displayName || user?.displayName || 'Anonymous',
-    role: currentUserParticipant?.role || userRole || 'spectator',
+    role: currentUserRole,
+    battleId: battleId,
     cameraOn,
     micOn,
     enabled: !!battle && !!user && isSessionOwner,
@@ -247,7 +313,7 @@ function Arena() {
   }, [battle]);
 
   const totalVotes = voteCounts.artistA + voteCounts.artistB;
-  const currentTurnSlot = battle?.currentTurn;
+  const currentTurnSlot = normalizeTurnSlot(battle?.currentTurn);
   const displayedMessages = [...chatMessages, ...countdownMessages];
 
   const scrollToSection = (sectionRef) => {
@@ -260,28 +326,112 @@ function Arena() {
   };
 
   const handleToggleMic = async () => {
+    if (!canUseMediaControls) return;
+    if (!canSpeakNow && !micOn) {
+      setMediaFeedback(getMicLockedMessage(currentUserRole, battle));
+      return;
+    }
+    if (connectionStatus !== 'connected') {
+      setMediaFeedback('Live room is still connecting. Please wait a moment.');
+      return;
+    }
+    if (micPending) return;
     const nextMicOn = !micOn;
+    setMicPending(true);
+    setMediaFeedback(nextMicOn ? 'Turning microphone on...' : 'Turning microphone off...');
     setMicOn(nextMicOn);
     try {
       await toggleMicrophone(nextMicOn);
       await syncMediaState({ isMicOn: nextMicOn });
+      setMediaFeedback(nextMicOn ? 'Microphone is live.' : 'Microphone is off.');
     } catch (error) {
       console.error('Arena mic toggle error:', error);
       setMicOn((prev) => !prev);
+      setMediaFeedback(error.message || 'Microphone could not be updated.');
+    } finally {
+      setMicPending(false);
     }
   };
 
+  useEffect(() => {
+    if (!micOn || canSpeakNow || !canUseMediaControls) return;
+
+    let cancelled = false;
+
+    const forceMute = async () => {
+      setMicOn(false);
+      setMicPending(true);
+      setMediaFeedback(getMicLockedMessage(currentUserRole, battle));
+
+      try {
+        if (connectionStatus === 'connected') {
+          await toggleMicrophone(false);
+        }
+        await syncMediaState({ isMicOn: false });
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Arena forced mute error:', error);
+          setMediaFeedback(error.message || getMicLockedMessage(currentUserRole, battle));
+        }
+      } finally {
+        if (!cancelled) {
+          setMicPending(false);
+        }
+      }
+    };
+
+    forceMute();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [battle, canSpeakNow, canUseMediaControls, connectionStatus, currentUserRole, micOn, toggleMicrophone]);
+
   const handleToggleCamera = async () => {
+    if (!canUseMediaControls) return;
+    if (connectionStatus !== 'connected') {
+      setMediaFeedback('Live room is still connecting. Please wait a moment.');
+      return;
+    }
+    if (cameraPending) return;
     const nextCameraOn = !cameraOn;
+    setCameraPending(true);
+    setMediaFeedback(nextCameraOn ? 'Turning camera on...' : 'Turning camera off...');
     setCameraOn(nextCameraOn);
     try {
       await toggleCamera(nextCameraOn);
       await syncMediaState({ isCameraOn: nextCameraOn });
+      setMediaFeedback(nextCameraOn ? 'Camera is live.' : 'Camera is off.');
     } catch (error) {
       console.error('Arena camera toggle error:', error);
       setCameraOn((prev) => !prev);
+      setMediaFeedback(error.message || 'Camera could not be updated.');
+    } finally {
+      setCameraPending(false);
     }
   };
+
+  useEffect(() => {
+    if (!diagnostics.isConnected) return;
+
+    if (cameraOn && diagnostics.localCameraPublished) {
+      setMediaFeedback('Camera is live.');
+      setCameraPending(false);
+    }
+
+    if (micOn && diagnostics.localMicPublished) {
+      setMediaFeedback(cameraOn && diagnostics.localCameraPublished ? 'Camera and microphone are live.' : 'Microphone is live.');
+      setMicPending(false);
+    }
+  }, [cameraOn, diagnostics.isConnected, diagnostics.localCameraPublished, diagnostics.localMicPublished, micOn]);
+
+  useEffect(() => {
+    if (roomError) {
+      setMediaFeedback(roomError);
+      setMicPending(false);
+      setCameraPending(false);
+    }
+  }, [roomError]);
 
   const handleLeaveRoom = async () => {
     if (user?.uid && battleId) {
@@ -374,16 +524,20 @@ function Arena() {
               currentUserId={user?.uid}
             />
 
-            <BattleRoomControls
-              micOn={micOn}
-              cameraOn={cameraOn}
-              onToggleMic={handleToggleMic}
-              onToggleCamera={handleToggleCamera}
-              onLeave={handleLeaveRoom}
-              connectionStatus={connectionStatus}
-            />
+            {canUseMediaControls && (
+              <BattleRoomControls
+                micOn={micOn}
+                cameraOn={cameraOn}
+                onToggleMic={handleToggleMic}
+                onToggleCamera={handleToggleCamera}
+                onLeave={handleLeaveRoom}
+                connectionStatus={connectionStatus}
+                micPending={micPending}
+                cameraPending={cameraPending}
+              />
+            )}
 
-            {roomError && <p className="start-hint">{roomError}</p>}
+            {(mediaFeedback || roomError) && <p className="start-hint">{roomError || mediaFeedback}</p>}
 
             <div className="mobile-stage-actions">
               <button type="button" className="btn btn-primary section-jump-btn" onClick={() => scrollToSection(chatSectionRef)}>

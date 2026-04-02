@@ -140,6 +140,8 @@
 .battle-room-controls {
   display: grid;
   gap: 0.75rem;
+  position: relative;
+  z-index: 5;
 }
 
 .battle-room-status-row,
@@ -299,8 +301,8 @@
 }
 
 .video-box.speaking {
-  border-color: rgba(230, 57, 70, 0.38);
-  box-shadow: inset 0 0 0 1px rgba(230, 57, 70, 0.18), 0 0 0 1px rgba(230, 57, 70, 0.12);
+  border-color: rgba(230, 57, 70, 0.5);
+  box-shadow: inset 0 0 0 2px rgba(230, 57, 70, 0.22), 0 0 0 2px rgba(230, 57, 70, 0.16), 0 0 22px rgba(230, 57, 70, 0.14);
 }
 
 .video-placeholder {
@@ -365,6 +367,10 @@
   font-size: 1.35rem;
   font-weight: 800;
   box-shadow: 0 20px 40px rgba(230, 57, 70, 0.24);
+}
+
+.avatar-placeholder.speaking {
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.98), 0 0 22px rgba(230, 57, 70, 0.3);
 }
 
 .video-info {
@@ -685,7 +691,7 @@
     min-height: calc(100dvh - 5.85rem);
     gap: 0.65rem;
     overflow: hidden;
-    padding: 0.85rem 0.85rem 0.7rem;
+    padding: 0.55rem 0.85rem 0.7rem;
     border-radius: 26px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background:
@@ -740,22 +746,38 @@
     border-radius: 20px;
   }
 
-  .arena-main::before {
-    content: 'Live Cameras';
-    display: block;
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.58);
-    text-align: center;
-    padding-bottom: 0.2rem;
+  .battle-stage-shell {
+    gap: 0.6rem;
+    padding: 0.65rem 0.8rem 0.8rem;
+  }
+
+  .battle-stage-grid {
+    gap: 0.65rem;
+  }
+
+  .battle-stage-card .video-box {
+    min-height: 142px;
+  }
+
+  .battle-room-controls {
+    margin-bottom: 1rem;
   }
 
   .mobile-stage-actions {
     display: flex;
     justify-content: center;
-    padding-top: 0.15rem;
+    margin-top: auto;
+    padding-top: 0.65rem;
+    padding-bottom: calc(0.15rem + env(safe-area-inset-bottom));
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    background: linear-gradient(180deg, rgba(10, 10, 10, 0), rgba(10, 10, 10, 0.96) 38%);
+  }
+
+  .mobile-stage-actions .section-jump-btn {
+    min-width: 210px;
+    box-shadow: 0 14px 34px rgba(230, 57, 70, 0.22);
   }
 
   .arena-tile {
@@ -894,7 +916,7 @@
   }
 
   .arena-tile .avatar-placeholder.speaking {
-    box-shadow: 0 0 0 2px rgba(230, 57, 70, 0.95), 0 0 18px rgba(230, 57, 70, 0.26);
+    box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.98), 0 0 22px rgba(230, 57, 70, 0.32);
   }
 
   .arena-tile .empty-slot {

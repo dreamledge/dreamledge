@@ -9,7 +9,7 @@ function LiveMediaTile({ participant, liveParticipant, roleBadgeClass, roleLabel
   const videoTrack = useMemo(() => getParticipantVideoTrack(liveParticipant?.participant), [liveParticipant]);
   const audioTrack = useMemo(() => getParticipantAudioTrack(liveParticipant?.participant), [liveParticipant]);
   const participantName = nameOverride || participant?.displayName || 'Open';
-  const showVideo = !!videoTrack && !!participant?.isCameraOn;
+  const showVideo = !!videoTrack;
 
   useEffect(() => {
     const element = videoRef.current;

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   connectToLiveKitRoom,
   disconnectFromLiveKitRoom,
+  ensureLiveKitAudioPlayback,
   getRoomMediaDiagnostics,
   setLiveKitMediaEnabled,
 } from '../services/livekitService';
@@ -13,23 +14,38 @@ function defaultDiagnostics() {
     remoteCount: 0,
     localCameraPublished: false,
     localMicPublished: false,
+    audioReady: false,
   };
 }
 
-export function useBattleRoomMedia({ roomName, identity, displayName, role, cameraOn, micOn, enabled = true }) {
+export function useBattleRoomMedia({ roomName, identity, displayName, role, battleId, cameraOn, micOn, enabled = true }) {
   const [room, setRoom] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
   const [diagnostics, setDiagnostics] = useState(defaultDiagnostics);
+  const roomRef = useRef(null);
+
+  const syncDiagnostics = useCallback((roomInstance = roomRef.current) => {
+    setDiagnostics(getRoomMediaDiagnostics(roomInstance));
+  }, []);
 
   useEffect(() => {
-    if (!enabled || !roomName || !identity) {
+    if (!enabled || !battleId || !roomName || !identity) {
+      if (roomRef.current) {
+        disconnectFromLiveKitRoom(roomRef.current);
+        roomRef.current = null;
+      }
+      setRoom(null);
+      setParticipants([]);
+      setStatus('idle');
+      setError('');
+      setDiagnostics(defaultDiagnostics());
       return undefined;
     }
 
     let disposed = false;
-    let connectedRoom = null;
+    let connectedRoom = roomRef.current;
 
     setStatus('connecting');
     setError('');
@@ -47,12 +63,13 @@ export function useBattleRoomMedia({ roomName, identity, displayName, role, came
         if (disposed) return;
 
         connectedRoom = roomInstance || connectedRoom;
+        roomRef.current = connectedRoom;
 
         if (nextState === 'connected') setStatus('connected');
         else if (nextState === 'reconnecting') setStatus('reconnecting');
         else if (nextState === 'disconnected') setStatus('disconnected');
 
-        setDiagnostics(getRoomMediaDiagnostics(roomInstance || connectedRoom));
+        syncDiagnostics(roomInstance || connectedRoom);
       },
     })
       .then(async (nextRoom) => {
@@ -62,16 +79,10 @@ export function useBattleRoomMedia({ roomName, identity, displayName, role, came
         }
 
         connectedRoom = nextRoom;
+        roomRef.current = nextRoom;
         setRoom(nextRoom);
         setStatus('connected');
-        setDiagnostics(getRoomMediaDiagnostics(nextRoom));
-
-        try {
-          await setLiveKitMediaEnabled(nextRoom, { microphone: micOn, camera: cameraOn });
-        } catch (mediaError) {
-          console.error('Initial media enable error:', mediaError);
-          setError(mediaError.message || 'Connected, but camera/microphone access is unavailable.');
-        }
+        syncDiagnostics(nextRoom);
       })
       .catch((connectError) => {
         if (disposed) return;
@@ -85,15 +96,45 @@ export function useBattleRoomMedia({ roomName, identity, displayName, role, came
       if (connectedRoom) {
         disconnectFromLiveKitRoom(connectedRoom);
       }
+      roomRef.current = null;
       setRoom(null);
       setParticipants([]);
+      setStatus('idle');
+      setError('');
       setDiagnostics(defaultDiagnostics());
     };
-  }, [cameraOn, displayName, enabled, identity, micOn, role, roomName]);
+  }, [battleId, displayName, enabled, identity, role, roomName, syncDiagnostics]);
 
-  const syncDiagnostics = useCallback(() => {
-    setDiagnostics(getRoomMediaDiagnostics(room));
-  }, [room]);
+  useEffect(() => {
+    if (!room) return undefined;
+
+    let cancelled = false;
+
+    const syncMedia = async () => {
+      try {
+        const audioState = await ensureLiveKitAudioPlayback(room);
+        await setLiveKitMediaEnabled(room, { microphone: micOn, camera: cameraOn });
+        if (!cancelled) {
+          setError('');
+          if (!audioState.started && audioState.reason && room.canPlaybackAudio === false) {
+            console.warn('LiveKit audio playback pending:', audioState.reason);
+          }
+          syncDiagnostics();
+        }
+      } catch (mediaError) {
+        if (cancelled) return;
+        console.error('Media sync error:', mediaError);
+        setError(mediaError.message || 'Connected, but camera/microphone access is unavailable.');
+        syncDiagnostics();
+      }
+    };
+
+    syncMedia();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cameraOn, micOn, room, syncDiagnostics]);
 
   useEffect(() => {
     if (!room) return undefined;
@@ -104,16 +145,26 @@ export function useBattleRoomMedia({ roomName, identity, displayName, role, came
   }, [room, syncDiagnostics]);
 
   const toggleMicrophone = useCallback(async (nextValue) => {
-    if (!room) throw new Error('Live room is not connected yet.');
-    await setLiveKitMediaEnabled(room, { microphone: nextValue });
-    syncDiagnostics();
-  }, [room, syncDiagnostics]);
+    if (!roomRef.current) throw new Error('Live room is not connected yet.');
+    const audioState = await ensureLiveKitAudioPlayback(roomRef.current);
+    await setLiveKitMediaEnabled(roomRef.current, { microphone: nextValue });
+    setError('');
+    if (!audioState.started && audioState.reason && roomRef.current.canPlaybackAudio === false) {
+      console.warn('LiveKit audio playback pending:', audioState.reason);
+    }
+    syncDiagnostics(roomRef.current);
+  }, [syncDiagnostics]);
 
   const toggleCamera = useCallback(async (nextValue) => {
-    if (!room) throw new Error('Live room is not connected yet.');
-    await setLiveKitMediaEnabled(room, { camera: nextValue });
-    syncDiagnostics();
-  }, [room, syncDiagnostics]);
+    if (!roomRef.current) throw new Error('Live room is not connected yet.');
+    const audioState = await ensureLiveKitAudioPlayback(roomRef.current);
+    await setLiveKitMediaEnabled(roomRef.current, { camera: nextValue });
+    setError('');
+    if (!audioState.started && audioState.reason && roomRef.current.canPlaybackAudio === false) {
+      console.warn('LiveKit audio playback pending:', audioState.reason);
+    }
+    syncDiagnostics(roomRef.current);
+  }, [syncDiagnostics]);
 
   return useMemo(() => ({
     room,

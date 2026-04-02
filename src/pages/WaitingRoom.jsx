@@ -61,11 +61,16 @@ function WaitingRoom() {
 
     return SLOT_ORDER.map((slot) => {
       const assignedUid = battle?.[slot];
-      if (!assignedUid || seenUsers.has(assignedUid)) {
+      let participant = assignedUid ? participantsByUid.get(assignedUid) || null : null;
+
+      if (!participant) {
+        participant = participants.find((entry) => entry.role === slot) || null;
+      }
+
+      if (!participant || seenUsers.has(participant.uid)) {
         return null;
       }
 
-      const participant = participantsByUid.get(assignedUid) || null;
       if (!participant) {
         return null;
       }
@@ -75,10 +80,10 @@ function WaitingRoom() {
         return null;
       }
 
-      seenUsers.add(assignedUid);
+      seenUsers.add(participant.uid);
       return participant;
     });
-  }, [battle, participantsByUid]);
+  }, [battle, participants, participantsByUid]);
   const canStart = !!(battle?.artistA && battle?.artistB && battle?.judge1 && battle?.judge2);
   const myBattleRole = currentUserParticipant?.role || null;
   const isArtistRole = myBattleRole === 'artistA' || myBattleRole === 'artistB';

@@ -1,30 +1,56 @@
 import { Room, RoomEvent, Track } from 'livekit-client';
 
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL || 'wss://tsm-5jmg1nfp.livekit.cloud';
-const DEFAULT_TOKEN_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-const isDevHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.') || window.location.hostname.startsWith('172.'));
-const LIVEKIT_TOKEN_ENDPOINT = import.meta.env.VITE_LIVEKIT_TOKEN_ENDPOINT || (isDevHost
-  ? `${window.location.protocol}//${DEFAULT_TOKEN_HOST}:3001/api/livekit-token`
-  : `${window.location.origin}/api/livekit-token`);
+
+function isLocalhostHost(hostname = '') {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+function resolveLiveKitTokenEndpoint() {
+  const configuredEndpoint = import.meta.env.VITE_LIVEKIT_TOKEN_ENDPOINT || '';
+
+  if (typeof window === 'undefined') {
+    return configuredEndpoint || '/api/livekit-token';
+  }
+
+  const { hostname, protocol, origin } = window.location;
+
+  if (configuredEndpoint) {
+    return configuredEndpoint.startsWith('/') ? `${origin}${configuredEndpoint}` : configuredEndpoint;
+  }
+
+  if (isLocalhostHost(hostname)) {
+    return `${protocol}//localhost:3001/api/livekit-token`;
+  }
+
+  return `${origin}/api/livekit-token`;
+}
+
+const LIVEKIT_TOKEN_ENDPOINT = resolveLiveKitTokenEndpoint();
 
 async function fetchToken({ roomName, identity, displayName, role }) {
   if (!LIVEKIT_URL || !LIVEKIT_TOKEN_ENDPOINT) {
-    throw new Error('LiveKit is not configured. Add VITE_LIVEKIT_URL and VITE_LIVEKIT_TOKEN_ENDPOINT.');
+    throw new Error('LiveKit is not configured. Add VITE_LIVEKIT_URL and VITE_LIVEKIT_TOKEN_ENDPOINT if needed.');
   }
 
-  const response = await fetch(LIVEKIT_TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ roomName, identity, displayName, role }),
-  });
+  try {
+    const response = await fetch(LIVEKIT_TOKEN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomName, identity, displayName, role }),
+    });
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Unable to fetch LiveKit token');
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || `Token request failed at ${LIVEKIT_TOKEN_ENDPOINT}`);
+    }
+
+    const data = await response.json();
+    return data.token;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown token service error.';
+    throw new Error(`Unable to request token from ${LIVEKIT_TOKEN_ENDPOINT}: ${errorMessage}`);
   }
-
-  const data = await response.json();
-  return data.token;
 }
 
 function parseMetadata(participant) {
@@ -50,7 +76,8 @@ export async function connectToLiveKitRoom({ roomName, identity, displayName, ro
       ...parseMetadata(participant),
       isMicOn: participant.isMicrophoneEnabled,
       isCameraOn: participant.isCameraEnabled,
-      isSpeaking: activeSpeakerIds.has(participant.identity) || !!participant.isSpeaking,
+      audioLevel: participant.audioLevel || 0,
+      isSpeaking: activeSpeakerIds.has(participant.identity) || !!participant.isSpeaking || (participant.audioLevel || 0) > 0.015,
       participant,
     }));
     onParticipantsChanged?.(participants);
@@ -66,8 +93,11 @@ export async function connectToLiveKitRoom({ roomName, identity, displayName, ro
   room.on(RoomEvent.LocalTrackUnpublished, emitParticipants);
   room.on(RoomEvent.TrackMuted, emitParticipants);
   room.on(RoomEvent.TrackUnmuted, emitParticipants);
+  room.on(RoomEvent.TrackPublished, emitParticipants);
+  room.on(RoomEvent.TrackUnpublished, emitParticipants);
   room.on(RoomEvent.TrackSubscribed, emitParticipants);
   room.on(RoomEvent.TrackUnsubscribed, emitParticipants);
+  room.on(RoomEvent.TrackSubscriptionStatusChanged, emitParticipants);
   room.on(RoomEvent.ActiveSpeakersChanged, emitParticipants);
   room.on(RoomEvent.ConnectionStateChanged, emitConnection);
   room.on(RoomEvent.Reconnecting, emitConnection);
@@ -78,6 +108,20 @@ export async function connectToLiveKitRoom({ roomName, identity, displayName, ro
   emitConnection();
   emitParticipants();
   return room;
+}
+
+export async function ensureLiveKitAudioPlayback(room) {
+  if (!room || typeof room.startAudio !== 'function') {
+    return { started: false, reason: 'unsupported' };
+  }
+
+  try {
+    await room.startAudio();
+    return { started: true, reason: '' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Audio playback could not start yet.';
+    return { started: false, reason: message };
+  }
 }
 
 export async function setLiveKitMediaEnabled(room, { microphone, camera }) {
@@ -102,12 +146,16 @@ export function detachTrack(trackPublication, element) {
 
 export function getParticipantVideoTrack(participant) {
   if (!participant) return null;
-  return Array.from(participant.videoTrackPublications.values()).find((publication) => publication.kind === Track.Kind.Video) || null;
+  return Array.from(participant.videoTrackPublications.values()).find(
+    (publication) => publication.kind === Track.Kind.Video && !!publication.track,
+  ) || null;
 }
 
 export function getParticipantAudioTrack(participant) {
   if (!participant) return null;
-  return Array.from(participant.audioTrackPublications.values()).find((publication) => publication.kind === Track.Kind.Audio) || null;
+  return Array.from(participant.audioTrackPublications.values()).find(
+    (publication) => publication.kind === Track.Kind.Audio && !!publication.track,
+  ) || null;
 }
 
 export function getRoomMediaDiagnostics(room) {
@@ -118,6 +166,7 @@ export function getRoomMediaDiagnostics(room) {
       localCameraPublished: false,
       localMicPublished: false,
       remoteCount: 0,
+      audioReady: false,
     };
   }
 
@@ -128,6 +177,7 @@ export function getRoomMediaDiagnostics(room) {
     remoteCount: room.remoteParticipants.size,
     localCameraPublished: Array.from(localParticipant.videoTrackPublications.values()).some((publication) => !!publication.track),
     localMicPublished: Array.from(localParticipant.audioTrackPublications.values()).some((publication) => !!publication.track),
+    audioReady: room.canPlaybackAudio !== false,
   };
 }
 

@@ -15,6 +15,8 @@ export default async function handler(req, res) {
     }
 
     const { roomName, identity, displayName, role } = req.body || {};
+    const canPublish = role !== 'spectator';
+
     if (!roomName || !identity) {
       return res.status(400).json({ error: 'roomName and identity are required' });
     }
@@ -27,9 +29,9 @@ export default async function handler(req, res) {
     token.addGrant({
       roomJoin: true,
       room: roomName,
-      canPublish: true,
+      canPublish,
       canSubscribe: true,
-      canPublishData: true,
+      canPublishData: canPublish,
     });
 
     token.metadata = JSON.stringify({
