@@ -347,7 +347,8 @@ function assignParticipantInTransaction({ transaction, battleRef, participantRef
   }
 
   const roleFields = { ...battle, ...updates };
-  const transitionedToSelection = battle.status === 'waiting' && hasRequiredSlotsFilled(roleFields);
+  const hasRequiredFilled = REQUIRED_SLOTS.every((slot) => !!roleFields[slot]);
+  const transitionedToSelection = battle.status === 'waiting' && hasRequiredFilled;
 
   if (transitionedToSelection) {
     updates.status = 'selection';
@@ -372,143 +373,128 @@ function assignParticipantInTransaction({ transaction, battleRef, participantRef
   });
 }
 
-async function maybeAdvanceBattlePhaseInternal(battleId, battle) {
-  if (!battle || !ACTIVE_STATES.includes(battle.status)) {
-    return battle;
-  }
+async function maybeAdvanceBattlePhaseInternal(battleId) {
+  try {
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(battleDoc(battleId));
+      if (!snap.exists()) return;
+      const battle = snap.data();
+      
+      if (!battle || !ACTIVE_STATES.includes(battle.status)) return;
 
-  const currentPhaseStart = getCountdownStartMs(battle.phaseStartTime);
-  const elapsed = Date.now() - currentPhaseStart;
+      const currentPhaseStart = getCountdownStartMs(battle.phaseStartTime);
+      const elapsed = Date.now() - currentPhaseStart;
 
-  if (battle.status === 'selection') {
-    const hasArtistATrack = !!battle.tracks?.artistA;
-    const hasArtistBTrack = !!battle.tracks?.artistB;
-
-    if (hasArtistATrack && hasArtistBTrack) {
-      await updateDoc(battleDoc(battleId), {
-        status: 'active',
-        phaseStartTime: nowTimestamp(),
-        currentTurn: 'artistA',
-        updatedAt: serverTimestamp(),
-      });
-      await addSystemMessage(battleId, 'Both tracks are locked in. Artist A is now performing.');
-      return null;
-    }
-
-    if (elapsed >= SELECTION_MS) {
-      if (hasArtistATrack && !hasArtistBTrack) {
-        await updateDoc(battleDoc(battleId), {
-          status: 'finished',
-          winner: 'artistA',
-          updatedAt: serverTimestamp(),
+      const newMsgRef = doc(messagesCollection(battleId));
+      const sysMessage = (msg) => {
+        transaction.set(newMsgRef, {
+          type: 'system',
+          system: true,
+          username: 'Dreamledge',
+          message: msg,
+          createdAt: serverTimestamp(),
         });
-        await addSystemMessage(battleId, 'Artist B failed to submit. Artist A wins by default.');
-      } else if (!hasArtistATrack && hasArtistBTrack) {
-        await updateDoc(battleDoc(battleId), {
-          status: 'finished',
-          winner: 'artistB',
-          updatedAt: serverTimestamp(),
-        });
-        await addSystemMessage(battleId, 'Artist A failed to submit. Artist B wins by default.');
-      } else {
-        await updateDoc(battleDoc(battleId), {
-          status: 'cancelled',
-          winner: null,
-          updatedAt: serverTimestamp(),
-        });
-        await addSystemMessage(battleId, 'No tracks were submitted. The battle has been cancelled.');
+      };
+
+      const updates = { updatedAt: serverTimestamp() };
+      let updated = false;
+
+      if (battle.status === 'selection') {
+        const hasArtistATrack = !!battle.tracks?.artistA;
+        const hasArtistBTrack = !!battle.tracks?.artistB;
+
+        if (hasArtistATrack && hasArtistBTrack) {
+          updates.status = 'active';
+          updates.phaseStartTime = nowTimestamp();
+          updates.currentTurn = 'artistA';
+          sysMessage('Both tracks are locked in. Artist A is now performing.');
+          updated = true;
+        } else if (elapsed >= SELECTION_MS) {
+          if (hasArtistATrack && !hasArtistBTrack) {
+            updates.status = 'finished';
+            updates.winner = 'artistA';
+            sysMessage('Artist B failed to submit. Artist A wins by default.');
+          } else if (!hasArtistATrack && hasArtistBTrack) {
+            updates.status = 'finished';
+            updates.winner = 'artistB';
+            sysMessage('Artist A failed to submit. Artist B wins by default.');
+          } else {
+            updates.status = 'cancelled';
+            updates.winner = null;
+            sysMessage('No tracks were submitted. The battle has been cancelled.');
+          }
+          updated = true;
+        }
       }
-      return null;
-    }
-  }
 
-  if (battle.status === 'active' || battle.status === 'overtime') {
-    const currentTurnMs = getCurrentTurnMs(battle);
-    if (elapsed < currentTurnMs) {
-      return battle;
-    }
+      if (battle.status === 'active' || battle.status === 'overtime') {
+        const currentTurnMs = getCurrentTurnMs(battle);
+        if (elapsed >= currentTurnMs) {
+          if (battle.currentTurn === 'artistA') {
+            updates['timers.artistA'] = 0;
+            updates.currentTurn = 'artistB';
+            updates.phaseStartTime = nowTimestamp();
+            sysMessage('Artist A time expired. Artist B is now performing.');
+          } else if (battle.currentTurn === 'artistB') {
+            updates['timers.artistB'] = 0;
+            updates.status = 'voting';
+            updates.currentTurn = null;
+            updates.phaseStartTime = nowTimestamp();
+            updates.votes = { judge1: null, judge2: null, crowd: null };
+            updates.crowdVotes = {};
+            sysMessage('Main battle complete. Voting is now open.');
+          } else if (battle.currentTurn === 'overtimeA') {
+            updates['overtimeTimers.artistA'] = 0;
+            updates.currentTurn = 'overtimeB';
+            updates.phaseStartTime = nowTimestamp();
+            sysMessage('Overtime switches to Artist B.');
+          } else if (battle.currentTurn === 'overtimeB') {
+            updates['overtimeTimers.artistB'] = 0;
+            updates.status = 'voting';
+            updates.currentTurn = null;
+            updates.phaseStartTime = nowTimestamp();
+            updates.votes = { judge1: null, judge2: null, crowd: null };
+            updates.crowdVotes = {};
+            sysMessage('Overtime performances are done. Final voting is now open.');
+          }
+          updated = true;
+        }
+      }
 
-    const updates = { updatedAt: serverTimestamp() };
+      if (battle.status === 'voting' && elapsed >= VOTING_MS) {
+        const crowdVote = calculateCrowdVote(battle.crowdVotes);
+        const resolvedVotes = {
+          ...(battle.votes || {}),
+          crowd: crowdVote,
+        };
+        const result = resolveWinnerFromVotes(resolvedVotes);
 
-    if (battle.currentTurn === 'artistA') {
-      updates['timers.artistA'] = 0;
-      updates.currentTurn = 'artistB';
-      updates.phaseStartTime = nowTimestamp();
-      await updateDoc(battleDoc(battleId), updates);
-      await addSystemMessage(battleId, 'Artist A time expired. Artist B is now performing.');
-      return null;
-    }
+        if (result === 'draw' && !battle.overtimeRound) {
+          updates.status = 'overtime';
+          updates.phaseStartTime = nowTimestamp();
+          updates.currentTurn = 'overtimeA';
+          updates.overtimeRound = true;
+          updates.votes = { judge1: null, judge2: null, crowd: null };
+          updates.crowdVotes = {};
+          sysMessage('Voting ended in a tie. Overtime has started.');
+        } else {
+          updates.status = 'finished';
+          updates.winner = result;
+          updates.votes = resolvedVotes;
+          sysMessage(result === 'draw' ? 'Battle ends in a draw after overtime.' : `${result === 'artistA' ? 'Artist A' : 'Artist B'} wins the battle.`);
+        }
+        updated = true;
+      }
 
-    if (battle.currentTurn === 'artistB') {
-      updates['timers.artistB'] = 0;
-      updates.status = 'voting';
-      updates.currentTurn = null;
-      updates.phaseStartTime = nowTimestamp();
-      updates.votes = { judge1: null, judge2: null, crowd: null };
-      updates.crowdVotes = {};
-      await updateDoc(battleDoc(battleId), updates);
-      await addSystemMessage(battleId, 'Main battle complete. Voting is now open.');
-      return null;
-    }
-
-    if (battle.currentTurn === 'overtimeA') {
-      updates['overtimeTimers.artistA'] = 0;
-      updates.currentTurn = 'overtimeB';
-      updates.phaseStartTime = nowTimestamp();
-      await updateDoc(battleDoc(battleId), updates);
-      await addSystemMessage(battleId, 'Overtime switches to Artist B.');
-      return null;
-    }
-
-    if (battle.currentTurn === 'overtimeB') {
-      updates['overtimeTimers.artistB'] = 0;
-      updates.status = 'voting';
-      updates.currentTurn = null;
-      updates.phaseStartTime = nowTimestamp();
-      updates.votes = { judge1: null, judge2: null, crowd: null };
-      updates.crowdVotes = {};
-      await updateDoc(battleDoc(battleId), updates);
-      await addSystemMessage(battleId, 'Overtime performances are done. Final voting is now open.');
-      return null;
-    }
-  }
-
-  if (battle.status === 'voting' && elapsed >= VOTING_MS) {
-    const crowdVote = calculateCrowdVote(battle.crowdVotes);
-    const resolvedVotes = {
-      ...(battle.votes || {}),
-      crowd: crowdVote,
-    };
-    const result = resolveWinnerFromVotes(resolvedVotes);
-
-    if (result === 'draw' && !battle.overtimeRound) {
-      await updateDoc(battleDoc(battleId), {
-        status: 'overtime',
-        phaseStartTime: nowTimestamp(),
-        currentTurn: 'overtimeA',
-        overtimeRound: true,
-        votes: { judge1: null, judge2: null, crowd: null },
-        crowdVotes: {},
-        updatedAt: serverTimestamp(),
-      });
-      await addSystemMessage(battleId, 'Voting ended in a tie. Overtime has started.');
-      return null;
-    }
-
-    await updateDoc(battleDoc(battleId), {
-      status: 'finished',
-      winner: result,
-      votes: resolvedVotes,
-      updatedAt: serverTimestamp(),
+      if (updated) {
+        transaction.update(battleDoc(battleId), updates);
+      }
     });
-    await addSystemMessage(
-      battleId,
-      result === 'draw' ? 'Battle ends in a draw after overtime.' : `${result === 'artistA' ? 'Artist A' : 'Artist B'} wins the battle.`,
-    );
-    return null;
+  } catch (error) {
+    if (error.code !== 'failed-precondition') {
+      console.error('maybeAdvanceBattlePhaseInternal error:', error);
+    }
   }
-
-  return battle;
 }
 
 export const battleService = {
@@ -519,66 +505,79 @@ export const battleService = {
       return this.findSpectatorMatch(userId, displayName, photoURL, sessionId);
     }
 
-    const matchRef = publicMatchmakingDoc();
-    const newBattleRef = doc(battlesCollection());
     const slotPreference = RANDOM_ROLE_SLOT_ORDER[role] || [];
+    
+    // Attempt to query existing waiting rooms
+    const battleQuery = query(battlesCollection(), where('status', '==', 'waiting'));
+    const snapshot = await getDocs(battleQuery);
+    
+    const candidates = [];
+    for (const docSnap of snapshot.docs) {
+      let battle = { id: docSnap.id, ...docSnap.data() };
+      
+      if (battle.isCustom) {
+        continue;
+      }
+      if (battleIncludesUser(battle, userId)) {
+        continue;
+      }
+      
+      // Sanitize the candidate room BEFORE checking its open slots to prevent skipping true slots
+      const sanitizedBattle = await this.sanitizeRequiredSlots(battle.id);
+      battle = sanitizedBattle || battle;
 
-    const result = await runTransaction(db, async (transaction) => {
-      const lockSnap = await transaction.get(matchRef);
-      const currentBattleId = lockSnap.exists() ? lockSnap.data()?.currentPublicBattleId : null;
-
-      let targetBattleRef = null;
-      let targetBattle = null;
-
-      if (currentBattleId) {
-        const candidateRef = battleDoc(currentBattleId);
-        const candidateSnap = await transaction.get(candidateRef);
-        if (candidateSnap.exists()) {
-          const candidateBattle = candidateSnap.data();
-          if (!candidateBattle.isCustom && candidateBattle.status === 'waiting' && getOpenSlot(candidateBattle, slotPreference)) {
-            targetBattleRef = candidateRef;
-            targetBattle = candidateBattle;
-          }
-        }
+      if (battle.status !== 'waiting') {
+        continue;
       }
 
-      if (!targetBattleRef) {
-        targetBattleRef = newBattleRef;
-        targetBattle = {
-          ...defaultBattleData({ createdBy: userId, createdByName: displayName, isCustom: false, roomCode: null }),
-          livekitRoomName: newBattleRef.id,
-          name: 'Public Battle Room',
-        };
-        transaction.set(targetBattleRef, targetBattle);
+      if (!getOpenSlot(battle, slotPreference)) {
+        continue;
       }
 
-      const participantRef = participantDoc(targetBattleRef.id, userId);
-      const joinResult = assignParticipantInTransaction({
-        transaction,
-        battleRef: targetBattleRef,
-        participantRef,
-        battle: targetBattle,
-        uid: userId,
-        displayName,
-        photoURL,
-        slotPreference,
-        sessionId,
-      });
+      candidates.push(battle);
+    }
 
-      const roomAfterJoin = {
-        ...targetBattle,
-        ...(joinResult.slot ? { [joinResult.slot]: userId } : {}),
-      };
-
-      transaction.set(matchRef, {
-        currentPublicBattleId: hasRequiredSlotsFilled(roomAfterJoin) ? null : targetBattleRef.id,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-
-      return joinResult;
+    candidates.sort((left, right) => {
+      const leftFilled = REQUIRED_SLOTS.filter((slot) => !!left[slot]).length;
+      const rightFilled = REQUIRED_SLOTS.filter((slot) => !!right[slot]).length;
+      return rightFilled - leftFilled;
     });
 
-    return result;
+    for (const candidate of candidates) {
+      try {
+        const joinResult = await assignSlotAndJoin({
+          battleId: candidate.id,
+          uid: userId,
+          displayName,
+          photoURL,
+          slotPreference,
+          sessionId,
+        });
+        return joinResult;
+      } catch (err) {
+        // Room might have filled up or changed state in a race condition, try next candidate
+        console.warn('Failed to join candidate room:', candidate.id, err);
+        continue;
+      }
+    }
+
+    // No valid candidates found, create a new one!
+    const newBattleRef = doc(battlesCollection());
+    const targetBattle = {
+      ...defaultBattleData({ createdBy: userId, createdByName: displayName, isCustom: false, roomCode: null }),
+      livekitRoomName: newBattleRef.id,
+      name: 'Public Battle Room',
+    };
+    await setDoc(newBattleRef, targetBattle);
+    
+    return assignSlotAndJoin({
+      battleId: newBattleRef.id,
+      uid: userId,
+      displayName,
+      photoURL,
+      slotPreference,
+      sessionId,
+    });
   },
 
   async createWaitingRoom(roomName, hostUserId, hostUsername, preferredRole = 'artist', options = {}) {
@@ -819,7 +818,8 @@ export const battleService = {
       }
 
       const battle = { id: snapshot.id, ...snapshot.data() };
-      await maybeAdvanceBattlePhaseInternal(snapshot.id, battle);
+      // Fire and forget the phase check
+      maybeAdvanceBattlePhaseInternal(snapshot.id);
       callback(battle);
     });
   },
@@ -862,7 +862,7 @@ export const battleService = {
       }
 
       const battle = { id: snapshot.id, ...snapshot.data() };
-      await maybeAdvanceBattlePhaseInternal(snapshot.id, battle);
+      maybeAdvanceBattlePhaseInternal(snapshot.id);
       callback(battle);
     });
   },
@@ -976,53 +976,79 @@ export const battleService = {
 
   async maybeAdvanceBattlePhase(battleId) {
     await ensureFirebaseSession();
-    const snap = await getDoc(battleDoc(battleId));
-    if (!snap.exists()) {
-      return null;
-    }
-    return maybeAdvanceBattlePhaseInternal(battleId, { id: snap.id, ...snap.data() });
+    await maybeAdvanceBattlePhaseInternal(battleId);
   },
 
-  async sanitizeRequiredSlots(battleId, battleData = null) {
+  async sanitizeRequiredSlots(battleId) {
     await ensureFirebaseSession();
-    const battle = battleData || (await getDoc(battleDoc(battleId))).data();
-    if (!battle) return null;
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const battleSnap = await transaction.get(battleDoc(battleId));
+        if (!battleSnap.exists()) return null;
+        const battle = { id: battleSnap.id, ...battleSnap.data() };
 
-    const duplicateCleanup = getDuplicateSlotCleanup(battle);
-    const staleCleanup = {};
+        const duplicateCleanup = getDuplicateSlotCleanup(battle);
+        const staleCleanup = {};
 
-    await Promise.all(
-      REQUIRED_SLOTS.map(async (slot) => {
-        const assignedUid = battle?.[slot];
-        if (!assignedUid || duplicateCleanup[slot] === null) return;
+        // Fetch participants in parallel within the transaction
+        const participantReads = await Promise.all(
+          REQUIRED_SLOTS.map(async (slot) => {
+            const assignedUid = battle[slot];
+            if (!assignedUid || duplicateCleanup[slot] === null) return { slot, snap: null };
+            const snap = await transaction.get(participantDoc(battleId, assignedUid));
+            return { slot, snap };
+          })
+        );
 
-        const participantSnap = await getDoc(participantDoc(battleId, assignedUid));
-        if (!participantSnap.exists() || isParticipantStale(participantSnap.data())) {
-          staleCleanup[slot] = null;
+        participantReads.forEach(({ slot, snap }) => {
+          if (snap) {
+            if (!snap.exists() || isParticipantStale(snap.data())) {
+              staleCleanup[slot] = null;
+            }
+          }
+        });
+
+        const combinedCleanup = {
+          ...duplicateCleanup,
+          ...staleCleanup,
+        };
+
+        if (Object.keys(combinedCleanup).length === 0) {
+          return battle;
         }
-      }),
-    );
 
-    const combinedCleanup = {
-      ...duplicateCleanup,
-      ...staleCleanup,
-    };
+        const updates = {
+          ...combinedCleanup,
+          updatedAt: serverTimestamp(),
+        };
 
-    if (!Object.keys(combinedCleanup).length) {
-      return battle;
+        // Determine if we lost required slots and should reset to waiting
+        // We use the same hasRequiredFilled logic
+        const resultingBattle = { ...battle, ...combinedCleanup };
+        let hasRequiredFilled = true;
+        for (const s of REQUIRED_SLOTS) {
+          if (!resultingBattle[s]) {
+            hasRequiredFilled = false;
+            break;
+          }
+        }
+
+        if (!hasRequiredFilled) {
+          updates.status = battle.status === 'waiting' ? 'waiting' : battle.status;
+          if (battle.status === 'selection') {
+            updates.status = 'waiting';
+            updates.phaseStartTime = null;
+            updates.currentTurn = null;
+          }
+        }
+
+        transaction.update(battleDoc(battleId), updates);
+        return { ...battle, ...updates };
+      });
+    } catch (error) {
+      console.warn('Failed to sanitize required slots:', error);
+      return null;
     }
-
-    const updates = {
-      ...combinedCleanup,
-      updatedAt: serverTimestamp(),
-    };
-
-    if (!hasRequiredSlotsFilled({ ...battle, ...combinedCleanup })) {
-      updates.status = battle.status === 'waiting' ? 'waiting' : battle.status;
-    }
-
-    await updateDoc(battleDoc(battleId), updates);
-    return { ...battle, ...updates };
   },
 };
 

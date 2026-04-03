@@ -143,13 +143,18 @@ function WaitingRoom() {
   useEffect(() => {
     if (!battle?.id) return;
 
-    const assigned = SLOT_ORDER.map((slot) => battle[slot]).filter(Boolean);
-    if (new Set(assigned).size === assigned.length) return;
-
-    battleService.sanitizeRequiredSlots(battle.id, battle).catch((error) => {
+    battleService.sanitizeRequiredSlots(battle.id).catch((error) => {
       console.error('Failed to sanitize waiting room slots:', error);
     });
-  }, [battle]);
+
+    const interval = setInterval(() => {
+      battleService.sanitizeRequiredSlots(battle.id).catch((error) => {
+        console.error('Failed to sanitize waiting room slots:', error);
+      });
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [battle?.id]);
 
   useEffect(() => {
     if (!roomId || !user?.uid) return undefined;
